@@ -30,6 +30,10 @@ constexpr size_t kNonceSize = 16;
 constexpr size_t kSessionIdSize = 16;
 constexpr uint32_t kMinPbkdf2Iterations = 100000;
 
+// Face avatar images travel hex-encoded in avatar_chunk control frames.
+constexpr size_t kAvatarMaxBytes = 4 * 1024 * 1024;
+constexpr size_t kAvatarChunkBytes = 24 * 1024;
+
 constexpr const char *kPairingUrlScheme = "ocp1";
 constexpr const char *kPairingUrlHost = "pair";
 

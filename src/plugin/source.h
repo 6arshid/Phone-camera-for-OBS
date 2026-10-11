@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -42,8 +43,10 @@ public:
 	void onVideoDimensions(int width, int height) override;
 
 	std::string statusText() const;
+	std::string avatarStatusText() const;
 
 private:
+	void loadAvatarImage(const std::string &path);
 	SessionSettings currentSettings() const;
 	void pushSettingsToSession();
 	void maybeOutputStatusCard();
@@ -67,6 +70,11 @@ private:
 	bool audioEnabled = false;
 	bool facePixelation = false;
 	int facePixelationStrength = 50;
+	AvatarConfig avatar;
+	std::string avatarPath;
+	int64_t avatarStamp = 0;
+	std::shared_ptr<const std::vector<uint8_t>> avatarData;
+	std::string avatarStatus;
 	bool statusOverlay = true;
 	std::string languagePref = "auto";
 	bool requirePairingPref = true;

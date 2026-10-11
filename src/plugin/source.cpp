@@ -6,6 +6,9 @@
 #include "status_card.h"
 #include "tr.h"
 
+#include "crypto/hex.h"
+#include "crypto/sha256.h"
+#include "protocol/constants.h"
 #include "settings/config.h"
 
 #include <obs-module.h>
@@ -14,8 +17,11 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 
 namespace ocp {
 namespace plugin {
@@ -180,6 +186,14 @@ void sourceGetDefaults(obs_data_t *settings)
 	obs_data_set_default_bool(settings, "audio_enabled", false);
 	obs_data_set_default_bool(settings, "face_pixelation", false);
 	obs_data_set_default_int(settings, "face_pixelation_strength", 50);
+	obs_data_set_default_bool(settings, "avatar_enabled", false);
+	obs_data_set_default_string(settings, "avatar_mode", "animate");
+	obs_data_set_default_int(settings, "avatar_cols", 1);
+	obs_data_set_default_int(settings, "avatar_rows", 1);
+	obs_data_set_default_int(settings, "avatar_fps", 12);
+	obs_data_set_default_int(settings, "avatar_scale", 150);
+	obs_data_set_default_int(settings, "avatar_offset_y", -10);
+	obs_data_set_default_bool(settings, "avatar_flip", false);
 	obs_data_set_default_bool(settings, "status_overlay", true);
 	obs_data_set_default_string(settings, "language", "auto");
 	obs_data_set_default_bool(settings, "require_pairing", true);
@@ -270,6 +284,32 @@ obs_properties_t *sourceGetProperties(void *data)
 	obs_properties_add_bool(props, "face_pixelation", tr("Face.Pixelation"));
 	obs_properties_add_int_slider(props, "face_pixelation_strength", tr("Face.Strength"), 1, 100, 1);
 	obs_properties_add_text(props, "face_pixelation_info", tr("Face.Info"), OBS_TEXT_INFO);
+
+	obs_properties_t *avatarGroup = obs_properties_create();
+	obs_properties_add_path(avatarGroup, "avatar_image", tr("Avatar.Image"), OBS_PATH_FILE,
+				"Images (*.png *.jpg *.jpeg *.webp *.gif *.bmp)", nullptr);
+	obs_property_t *avatarMode = obs_properties_add_list(
+		avatarGroup, "avatar_mode", tr("Avatar.Mode"), OBS_COMBO_TYPE_LIST,
+		OBS_COMBO_FORMAT_STRING);
+	obs_property_list_add_string(avatarMode, tr("Avatar.Mode.Animate"), "animate");
+	obs_property_list_add_string(avatarMode, tr("Avatar.Mode.Position"), "position");
+	obs_properties_add_int(avatarGroup, "avatar_cols", tr("Avatar.Cols"), 1, 16, 1);
+	obs_properties_add_int(avatarGroup, "avatar_rows", tr("Avatar.Rows"), 1, 16, 1);
+	obs_properties_add_int_slider(avatarGroup, "avatar_fps", tr("Avatar.Fps"), 1, 30, 1);
+	obs_properties_add_int_slider(avatarGroup, "avatar_scale", tr("Avatar.Scale"), 50, 300, 5);
+	obs_properties_add_int_slider(avatarGroup, "avatar_offset_y", tr("Avatar.OffsetY"), -100,
+				      100, 5);
+	obs_properties_add_bool(avatarGroup, "avatar_flip", tr("Avatar.Flip"));
+	std::string avatarInfo = trString("Avatar.Info");
+	if (source) {
+		std::string st = source->avatarStatusText();
+		if (!st.empty())
+			avatarInfo = st + "\n" + avatarInfo;
+	}
+	obs_properties_add_text(avatarGroup, "avatar_info", avatarInfo.c_str(), OBS_TEXT_INFO);
+	obs_properties_add_group(props, "avatar_enabled", tr("Avatar.Enabled"),
+				 OBS_GROUP_CHECKABLE, avatarGroup);
+
 	obs_properties_add_bool(props, "audio_enabled", tr("Audio.Enabled"));
 	obs_properties_add_bool(props, "status_overlay", tr("Overlay.Status"));
 
@@ -344,6 +384,8 @@ SessionSettings PhoneSource::currentSettings() const
 	out.audioEnabled = audioEnabled;
 	out.cameraCtl.face_pixelation = facePixelation;
 	out.cameraCtl.face_pixelation_strength = facePixelationStrength;
+	out.avatar = avatar;
+	out.avatarData = avatarData;
 	out.streamActive = handle ? obs_source_showing(handle) || obs_source_active(handle) : streamActive;
 	out.aspect = aspect;
 	return out;
@@ -379,6 +421,18 @@ void PhoneSource::updateSettings(obs_data_t *settings)
 		audioEnabled = obs_data_get_bool(settings, "audio_enabled");
 		facePixelation = obs_data_get_bool(settings, "face_pixelation");
 		facePixelationStrength = (int)obs_data_get_int(settings, "face_pixelation_strength");
+		avatar.enabled = obs_data_get_bool(settings, "avatar_enabled");
+		avatar.mode = strcmp(obs_data_get_string(settings, "avatar_mode"), "position") == 0
+				      ? "position"
+				      : "animate";
+		avatar.cols = std::clamp((int)obs_data_get_int(settings, "avatar_cols"), 1, 16);
+		avatar.rows = std::clamp((int)obs_data_get_int(settings, "avatar_rows"), 1, 16);
+		avatar.fps = std::clamp((int)obs_data_get_int(settings, "avatar_fps"), 1, 30);
+		avatar.scale = std::clamp((int)obs_data_get_int(settings, "avatar_scale"), 50, 300);
+		avatar.offset_y =
+			std::clamp((int)obs_data_get_int(settings, "avatar_offset_y"), -100, 100);
+		avatar.flip = obs_data_get_bool(settings, "avatar_flip");
+		loadAvatarImage(obs_data_get_string(settings, "avatar_image"));
 		statusOverlay = obs_data_get_bool(settings, "status_overlay");
 		languagePref = obs_data_get_string(settings, "language");
 		requirePairingPref = obs_data_get_bool(settings, "require_pairing");
@@ -416,6 +470,75 @@ void PhoneSource::updateSettings(obs_data_t *settings)
 
 	pushSettingsToSession();
 	server.requestAttach(this);
+}
+
+// Caller holds settingsMutex. Re-reads only when the path, size or mtime change.
+void PhoneSource::loadAvatarImage(const std::string &path)
+{
+	namespace fs = std::filesystem;
+	if (path.empty()) {
+		avatarPath.clear();
+		avatarStamp = 0;
+		avatarData.reset();
+		avatarStatus.clear();
+		avatar.image.clear();
+		avatar.size = 0;
+		return;
+	}
+
+	std::error_code ec;
+	fs::path file = fs::u8path(path);
+	uintmax_t size = fs::file_size(file, ec);
+	int64_t stamp = ec ? 0 : (int64_t)fs::last_write_time(file, ec).time_since_epoch().count();
+	if (!ec)
+		stamp ^= (int64_t)size;
+	if (path == avatarPath && stamp == avatarStamp && !ec)
+		return;
+	avatarPath = path;
+	avatarStamp = stamp;
+	avatarData.reset();
+	avatar.image.clear();
+	avatar.size = 0;
+
+	if (ec) {
+		avatarStatus = trString("Avatar.Missing");
+		return;
+	}
+	if (size == 0 || size > kAvatarMaxBytes) {
+		avatarStatus = trString("Avatar.TooLarge");
+		return;
+	}
+	auto bytes = std::make_shared<std::vector<uint8_t>>((size_t)size);
+	std::ifstream in(file, std::ios::binary);
+	if (!in.read(reinterpret_cast<char *>(bytes->data()), (std::streamsize)size)) {
+		avatarStatus = trString("Avatar.Missing");
+		return;
+	}
+	const uint8_t *b = bytes->data();
+	bool known = (size >= 8 && b[0] == 0x89 && b[1] == 'P' && b[2] == 'N' && b[3] == 'G') ||
+		     (size >= 3 && b[0] == 0xff && b[1] == 0xd8 && b[2] == 0xff) ||
+		     (size >= 6 && memcmp(b, "GIF8", 4) == 0) ||
+		     (size >= 12 && memcmp(b, "RIFF", 4) == 0 && memcmp(b + 8, "WEBP", 4) == 0) ||
+		     (size >= 2 && b[0] == 'B' && b[1] == 'M');
+	if (!known) {
+		avatarStatus = trString("Avatar.BadFormat");
+		return;
+	}
+
+	uint8_t digest[32];
+	Sha256::hash(bytes->data(), bytes->size(), digest);
+	avatar.image = toHex(digest, sizeof(digest));
+	avatar.size = (int64_t)bytes->size();
+	avatarData = bytes;
+	char buf[64];
+	snprintf(buf, sizeof(buf), " (%.0f KB)", (double)size / 1024.0);
+	avatarStatus = trString("Avatar.Loaded") + buf;
+}
+
+std::string PhoneSource::avatarStatusText() const
+{
+	std::lock_guard<std::mutex> lock(settingsMutex);
+	return avatarStatus;
 }
 
 void PhoneSource::activate()

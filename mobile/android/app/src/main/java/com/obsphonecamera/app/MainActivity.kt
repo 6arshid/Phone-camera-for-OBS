@@ -2,6 +2,7 @@ package com.obsphonecamera.app
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.OrientationEventListener
@@ -25,6 +26,14 @@ class MainActivity : Activity(), SessionManager.Listener {
     private var resumed = false
     private lateinit var orientationListener: OrientationEventListener
     private var lastDeviceDegrees = -1
+    private lateinit var avatarSwitch: Switch
+    private var avatarImageLabel: TextView? = null
+    private var pickReconnect = false
+    private var avatarPicked = false
+
+    companion object {
+        private const val REQ_AVATAR = 10
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,7 +68,7 @@ class MainActivity : Activity(), SessionManager.Listener {
         fun button(textId: Int, action: () -> Unit) {
             layout.addView(Button(this).apply { setText(textId); setOnClickListener { action() } })
         }
-        label(getString(R.string.home_title) + "  1.0.4").textSize = 21f
+        label(getString(R.string.home_title) + "  1.0.7").textSize = 21f
         status = label(getString(R.string.status_idle))
         label(getString(R.string.scan_hint))
         button(R.string.btn_scan_qr) {
@@ -119,6 +128,24 @@ class MainActivity : Activity(), SessionManager.Listener {
             session.userSetFacePixelation(enabled, faceStrength.progress + 1)
         }
         label(getString(R.string.face_info)).textSize = 12f
+        val avatarRow = LinearLayout(this)
+        avatarSwitch = Switch(this).apply {
+            setText(R.string.avatar_enabled)
+            setTextColor(0xfff1f5f9.toInt())
+            isChecked = prefs.avatarEnabled
+            setOnCheckedChangeListener { _, enabled ->
+                if (enabled && !session.hasLocalAvatar) {
+                    isChecked = false
+                    showAvatarDialog()
+                } else session.userSetAvatar(enabled, prefs.avatarSettings)
+            }
+        }
+        avatarRow.addView(avatarSwitch, LinearLayout.LayoutParams(0, -2, 1f))
+        avatarRow.addView(Button(this).apply {
+            setText(R.string.avatar_settings)
+            setOnClickListener { showAvatarDialog() }
+        })
+        layout.addView(avatarRow)
         session.userSetMicMuted(true)
         stats = label("")
         preview = SurfaceView(this)
@@ -138,6 +165,92 @@ class MainActivity : Activity(), SessionManager.Listener {
         setContentView(layout)
         scanRequested = !prefs.hasPairing()
         if (!cameraAllowed()) requestPermissions(arrayOf(Manifest.permission.CAMERA), 1)
+    }
+
+    private fun showAvatarDialog() {
+        avatarPicked = false
+        val s = prefs.avatarSettings
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 24, 48, 0)
+        }
+        fun text(value: String) = TextView(this).apply { text = value; box.addView(this) }
+        val imageState = text(getString(if (session.hasLocalAvatar) R.string.avatar_image_ready else R.string.avatar_no_image))
+        box.addView(Button(this).apply {
+            setText(R.string.avatar_choose)
+            setOnClickListener {
+                pickReconnect = session.state == SessionState.CONNECTED || session.state == SessionState.STREAMING
+                avatarImageLabel = imageState
+                startActivityForResult(
+                    Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*"),
+                    REQ_AVATAR,
+                )
+            }
+        })
+        val mode = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item,
+                listOf(getString(R.string.avatar_mode_animate), getString(R.string.avatar_mode_position)))
+            setSelection(if (s.mode == "position") 1 else 0)
+        }
+        box.addView(mode)
+        fun slider(labelId: Int, min: Int, max: Int, value: Int): SeekBar {
+            val label = text(getString(labelId, value))
+            return SeekBar(this).apply {
+                this.max = max - min
+                progress = value - min
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(bar: SeekBar?, v: Int, fromUser: Boolean) {
+                        label.text = getString(labelId, v + min)
+                    }
+                    override fun onStartTrackingTouch(bar: SeekBar?) = Unit
+                    override fun onStopTrackingTouch(bar: SeekBar?) = Unit
+                })
+                box.addView(this)
+            }
+        }
+        val cols = slider(R.string.avatar_cols, 1, 16, s.cols)
+        val rows = slider(R.string.avatar_rows, 1, 16, s.rows)
+        val fps = slider(R.string.avatar_fps, 1, 30, s.fps)
+        val scale = slider(R.string.avatar_scale, 50, 300, s.scale)
+        val offset = slider(R.string.avatar_offset, -100, 100, s.offsetY)
+        val flip = CheckBox(this).apply { setText(R.string.avatar_flip); isChecked = s.flip; box.addView(this) }
+        text(getString(R.string.avatar_info)).textSize = 12f
+        android.app.AlertDialog.Builder(this)
+            .setTitle(R.string.avatar_enabled)
+            .setView(ScrollView(this).apply { addView(box) })
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val settings = com.obsphonecamera.app.camera.AvatarSettings(
+                    mode = if (mode.selectedItemPosition == 1) "position" else "animate",
+                    cols = cols.progress + 1,
+                    rows = rows.progress + 1,
+                    fps = fps.progress + 1,
+                    scale = scale.progress + 50,
+                    offsetY = offset.progress - 100,
+                    flip = flip.isChecked,
+                )
+                // The import may still be running on the session thread.
+                val enabled = session.hasLocalAvatar || avatarPicked
+                avatarSwitch.isChecked = enabled
+                session.userSetAvatar(enabled, settings)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .setOnDismissListener { avatarImageLabel = null }
+            .show()
+    }
+
+    @Deprecated("Deprecated in Android 11; fine for this single picker")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_AVATAR) return
+        // Leaving for the picker stops the stream (see onStop); resume it afterwards.
+        if (pickReconnect && prefs.hasPairing()) session.connectStored()
+        pickReconnect = false
+        val uri = data?.data ?: return
+        avatarPicked = true
+        session.userImportAvatar(uri) { ok ->
+            avatarImageLabel?.setText(if (ok) R.string.avatar_image_ready else R.string.avatar_import_failed)
+            if (!ok) Toast.makeText(this, R.string.avatar_import_failed, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun cameraAllowed() = checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED

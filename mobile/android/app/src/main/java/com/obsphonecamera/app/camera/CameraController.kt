@@ -59,9 +59,10 @@ class CameraController(
     var currentCameraId: String? = null
         private set
 
-    var onFaces: ((List<RectF>) -> Unit)? = null
+    var onFaces: ((List<FaceSample>) -> Unit)? = null
     private var outputSize = Size(1, 1)
     private var pendingFacePixelation = false
+    private var pendingAvatarTracking = false
     private val captureCallback = object : CameraCaptureSession.CaptureCallback() {
         override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
             val id = currentCameraId ?: return
@@ -78,17 +79,20 @@ class CameraController(
                 val inset = (region.height() - region.width() / aspect) / 2f
                 region.inset(0f, inset)
             }
+            fun nx(x: Float) = (x - region.left) / region.width()
+            fun ny(y: Float) = (y - region.top) / region.height()
+            // Normalized to the visible stream; margins and clamping are up to consumers.
             val faces = result.get(CaptureResult.STATISTICS_FACES).orEmpty().map { face ->
-                val r = RectF(face.bounds)
-                // Include forehead/chin and allow for metadata latency during movement.
-                r.inset(-r.width() * 0.30f, -r.height() * 0.40f)
-                RectF(
-                    ((r.left - region.left) / region.width()).coerceIn(0f, 1f),
-                    ((r.top - region.top) / region.height()).coerceIn(0f, 1f),
-                    ((r.right - region.left) / region.width()).coerceIn(0f, 1f),
-                    ((r.bottom - region.top) / region.height()).coerceIn(0f, 1f),
+                val b = face.bounds
+                val l = face.leftEyePosition
+                val r = face.rightEyePosition
+                FaceSample(
+                    nx(b.left.toFloat()), ny(b.top.toFloat()), nx(b.right.toFloat()), ny(b.bottom.toFloat()),
+                    if (l != null && r != null) floatArrayOf(
+                        nx(l.x.toFloat()), ny(l.y.toFloat()), nx(r.x.toFloat()), ny(r.y.toFloat()),
+                    ) else null,
                 )
-            }.filter { it.width() > 0f && it.height() > 0f }
+            }
             onFaces?.invoke(faces)
         }
     }
@@ -237,6 +241,12 @@ class CameraController(
         reapply()
     }
 
+    fun setAvatarTracking(enabled: Boolean) {
+        if (enabled == pendingAvatarTracking) return
+        pendingAvatarTracking = enabled
+        reapply()
+    }
+
     fun closeCamera() {
         onFaces?.invoke(emptyList())
         try {
@@ -279,10 +289,12 @@ class CameraController(
         }
 
         val modes = chars.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_FACE_DETECT_MODES) ?: intArrayOf()
-        val mode = if (!pendingFacePixelation) CaptureRequest.STATISTICS_FACE_DETECT_MODE_OFF
-            else if (modes.contains(CaptureRequest.STATISTICS_FACE_DETECT_MODE_SIMPLE)) CaptureRequest.STATISTICS_FACE_DETECT_MODE_SIMPLE
-            else if (modes.contains(CaptureRequest.STATISTICS_FACE_DETECT_MODE_FULL)) CaptureRequest.STATISTICS_FACE_DETECT_MODE_FULL
-            else CaptureRequest.STATISTICS_FACE_DETECT_MODE_OFF
+        val simple = CaptureRequest.STATISTICS_FACE_DETECT_MODE_SIMPLE
+        val full = CaptureRequest.STATISTICS_FACE_DETECT_MODE_FULL
+        // FULL adds eye landmarks, which let the avatar follow head roll.
+        val preferred = if (pendingAvatarTracking) listOf(full, simple) else listOf(simple, full)
+        val mode = if (!pendingFacePixelation && !pendingAvatarTracking) CaptureRequest.STATISTICS_FACE_DETECT_MODE_OFF
+            else preferred.firstOrNull { modes.contains(it) } ?: CaptureRequest.STATISTICS_FACE_DETECT_MODE_OFF
         builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, mode)
         applyFocus(builder, chars)
         applyExposure(builder, chars)

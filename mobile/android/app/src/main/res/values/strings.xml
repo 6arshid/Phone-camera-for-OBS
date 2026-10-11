@@ -79,4 +79,19 @@
     <string name="face_pixelation">Pixelate faces</string>
     <string name="face_strength">Pixelation strength: %1$d</string>
     <string name="face_info">If tracking is lost or unsupported, the whole image is pixelated. Either the phone or OBS switch enables protection.</string>
+    <string name="avatar_enabled">Face avatar (image / sheet)</string>
+    <string name="avatar_settings">Avatar…</string>
+    <string name="avatar_choose">Choose image or character sheet</string>
+    <string name="avatar_no_image">No image chosen yet</string>
+    <string name="avatar_image_ready">Image ready</string>
+    <string name="avatar_import_failed">Could not read that image</string>
+    <string name="avatar_mode_animate">Animate frames while the face moves</string>
+    <string name="avatar_mode_position">Pick cell by face position</string>
+    <string name="avatar_cols">Sheet columns: %1$d</string>
+    <string name="avatar_rows">Sheet rows: %1$d</string>
+    <string name="avatar_fps">Animation speed: %1$d fps</string>
+    <string name="avatar_scale">Size: %1$d%% of face</string>
+    <string name="avatar_offset">Vertical offset: %1$d%% (negative = up)</string>
+    <string name="avatar_flip">Mirror when moving left</string>
+    <string name="avatar_info">Follows your face using the camera’s own face tracking: no AI model and no online API. A 1×1 sheet is a plain image. An avatar set in OBS takes priority.</string>
 </resources>

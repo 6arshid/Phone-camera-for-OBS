@@ -3,15 +3,21 @@ package com.obsphonecamera.app.net
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Build
 import android.os.BatteryManager
 import android.os.Handler
 import android.os.HandlerThread
 import android.view.Surface
 import com.obsphonecamera.app.audio.MicCapture
+import com.obsphonecamera.app.camera.AvatarSettings
 import com.obsphonecamera.app.camera.CameraEntry
+import com.obsphonecamera.app.camera.GlPipeline
 import com.obsphonecamera.app.camera.StreamController
 import com.obsphonecamera.app.protocol.AuthOk
+import com.obsphonecamera.app.protocol.AvatarAssembler
+import com.obsphonecamera.app.protocol.AvatarConfig
 import com.obsphonecamera.app.protocol.CameraControlConfig
 import com.obsphonecamera.app.protocol.ControlCipher
 import com.obsphonecamera.app.protocol.HintMessage
@@ -20,6 +26,7 @@ import com.obsphonecamera.app.protocol.PairingInfo
 import com.obsphonecamera.app.protocol.ProtocolException
 import com.obsphonecamera.app.protocol.SessionKeys
 import com.obsphonecamera.app.protocol.StreamConfig
+import com.obsphonecamera.app.util.AvatarStore
 import com.obsphonecamera.app.util.Hex
 import com.obsphonecamera.app.util.Prefs
 import org.json.JSONArray
@@ -120,6 +127,11 @@ class SessionManager(
     private var lastHintRttMs = -1
 
     private var localMicMuted = false
+
+    private val avatarStore = AvatarStore(appContext, prefs)
+    private val avatarAssembler = AvatarAssembler()
+    private var obsAvatar: Pair<String, Bitmap>? = null
+    private var localAvatar: Bitmap? = null
 
     private var previewSurface: Surface? = null
     private var previewWidth = 0
@@ -253,6 +265,61 @@ class SessionManager(
             prefs.facePixelationStrength = strength
             config?.let { stream?.applyControls(effectiveCameraControls(it.camera)) }
         }
+    }
+
+    fun userSetAvatar(enabled: Boolean, settings: AvatarSettings) {
+        executor.execute {
+            prefs.avatarEnabled = enabled
+            prefs.avatarSettings = settings
+            applyAvatar()
+        }
+    }
+
+    /** Imports a picked image; [done] runs on the main thread with the result. */
+    fun userImportAvatar(uri: Uri, done: (Boolean) -> Unit) {
+        executor.execute {
+            val ok = try { avatarStore.importLocal(uri) } catch (_: Exception) { false }
+            if (ok) {
+                localAvatar = null
+                applyAvatar()
+            }
+            mainHandler.post { done(ok) }
+        }
+    }
+
+    val hasLocalAvatar: Boolean get() = avatarStore.hasLocal
+
+    /** OBS's avatar wins once its image has arrived; otherwise the phone's own, if enabled. */
+    private fun applyAvatar() {
+        val obs = config?.avatar
+        val spec = obsAvatarSpec(obs) ?: if (prefs.avatarEnabled) {
+            val bmp = localAvatar ?: avatarStore.loadLocal()?.also { localAvatar = it }
+            bmp?.let { GlPipeline.AvatarSpec(it, prefs.avatarSettings) }
+        } else null
+        stream?.setAvatar(spec)
+    }
+
+    private fun obsAvatarSpec(obs: AvatarConfig?): GlPipeline.AvatarSpec? {
+        if (obs == null || !obs.hasImage) return null
+        val cached = obsAvatar
+        val bmp = if (cached != null && cached.first == obs.image) cached.second
+            else avatarStore.loadObs(obs.image)?.also { obsAvatar = obs.image to it }
+        bmp ?: return null
+        return GlPipeline.AvatarSpec(
+            bmp,
+            AvatarSettings(obs.mode, obs.cols, obs.rows, obs.fps, obs.scale, obs.offsetY, obs.flip),
+        )
+    }
+
+    private fun onAvatarChunk(text: String) {
+        val (hash, bytes) = avatarAssembler.accept(text) ?: return
+        try {
+            avatarStore.saveObs(hash, bytes)
+        } catch (_: Exception) {
+            return
+        }
+        obsAvatar = null
+        applyAvatar()
     }
 
     private fun effectiveCameraControls(camera: CameraControlConfig): CameraControlConfig {
@@ -440,6 +507,7 @@ class SessionManager(
             "config" -> onConfig(text)
             "ping" -> onPing(text)
             "hint" -> onHint(text)
+            "avatar_chunk" -> onAvatarChunk(text)
             "error" -> onErrorFrame(text)
             "bye" -> control?.close()
             else -> Unit
@@ -584,7 +652,7 @@ class SessionManager(
             .put("channels", JSONArray().put(1))
         val camerasArr = JSONArray()
         val features = JSONObject().put("torch", true).put("manual_focus", true)
-            .put("exposure", true).put("white_balance", true)
+            .put("exposure", true).put("white_balance", true).put("avatar", true)
         stream?.listCameras()?.forEach { entry ->
             camerasArr.put(JSONObject().put("id", if (entry.facingFront) "front" else "back").put("label", entry.label))
             features.put("torch", features.optBoolean("torch") && entry.supportsTorch)
@@ -600,7 +668,9 @@ class SessionManager(
                     .put("video", videoCaps)
                     .put("audio", audioCaps)
                     .put("cameras", camerasArr)
-                    .put("features", features),
+                    .put("features", features)
+                    // Lets OBS skip re-sending an image the phone already cached.
+                    .put("avatar_have", avatarStore.obsHash),
             )
         sendEncrypted(ready)
     }
@@ -632,6 +702,7 @@ class SessionManager(
             stopPipeline()
         }
         stream?.applyControls(effectiveCameraControls(cfg.camera))
+        applyAvatar()
         applyMicState()
     }
 
@@ -896,6 +967,7 @@ class SessionManager(
         control = null
         sessionKeys = null
         config = null
+        avatarAssembler.reset()
         streamStartNs = 0
     }
 

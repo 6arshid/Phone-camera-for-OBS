@@ -1,5 +1,48 @@
 # Android APK
 
+## Version 1.0.7
+
+Fixes the stream sometimes never starting ("Connected — waiting for OBS to
+start the stream" while OBS keeps showing its waiting card). `drawFrame` held
+the GlPipeline lock while waiting up to 500 ms for a camera frame and
+re-acquired it immediately. Before the camera opened, the session thread's
+`setCameraTransform`/`setRotation` calls starved on that lock, so the camera
+never opened. The frame wait now happens outside the lock.
+
+Validation: APK builds; 27 Android unit tests pass. Needs on-device confirmation.
+
+## Version 1.0.6
+
+Fixes black video on the phone preview and in OBS introduced in 1.0.5. The
+avatar's `sampler2D` defaulted to texture unit 0, which the camera's
+`samplerExternalOES` already uses. GLES forbids sampler types sharing a unit,
+so every draw failed with `GL_INVALID_OPERATION`. The sprite sampler is now
+always bound to unit 1. Shader compile/link failures and the first draw-time
+GL error are now logged under the `OcpGl` logcat tag.
+
+Validation: both shaders compile with glslangValidator (GLSL ES 1.00); APK
+builds; 27 Android unit tests pass. Still needs on-device confirmation.
+The 1.0.5 Windows plugin is unchanged and remains compatible.
+
+## Version 1.0.5
+
+Adds **Face avatar**: an image or character sheet replaces each tracked face
+and follows its movement, size and head tilt. Camera2 face metadata drives it;
+no AI model or online API is used. Choose the image in the OBS source
+properties (sent to the phone over the encrypted control channel and cached by
+SHA-256) or on the phone (*Avatar…*). Sheets support *animate while moving*
+and *cell by face position* modes, with size, offset, speed and direction-flip
+options. OBS's avatar takes priority over the phone's. See [face avatar](../docs/FACE-AVATAR.md).
+
+Validation: debug APK builds; 27 Android unit tests pass (avatar tracker,
+avatar protocol/reassembly, messages, texture transform). The Windows plugin
+builds; 56 C++ unit tests and the OBS module integration test pass. No Android
+device was connected, so on-device sprite alignment (front/back, rotation),
+FULL-mode head tilt and the gallery picker still need physical verification.
+iOS is not included.
+
+Install `Phone-Camera-for-OBS-1.0.5.apk` together with the 1.0.5 Windows plugin.
+
 ## Version 1.0.4
 
 Adds a persistent **Pixelate faces** switch and strength slider (1..100) on

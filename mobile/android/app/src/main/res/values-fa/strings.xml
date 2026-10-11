@@ -79,4 +79,19 @@
     <string name="face_pixelation">شطرنجی‌کردن چهره</string>
     <string name="face_strength">شدت شطرنجی‌شدن: %1$d</string>
     <string name="face_info">اگر تشخیص چهره قطع شود یا پشتیبانی نشود، کل تصویر شطرنجی می‌شود. فعال‌بودن کلید گوشی یا OBS کافی است.</string>
+    <string name="avatar_enabled">آواتار چهره (عکس / شیت)</string>
+    <string name="avatar_settings">آواتار…</string>
+    <string name="avatar_choose">انتخاب عکس یا کاراکتر شیت</string>
+    <string name="avatar_no_image">هنوز عکسی انتخاب نشده</string>
+    <string name="avatar_image_ready">عکس آماده است</string>
+    <string name="avatar_import_failed">این عکس خوانده نشد</string>
+    <string name="avatar_mode_animate">پخش فریم‌ها هنگام حرکت چهره</string>
+    <string name="avatar_mode_position">انتخاب خانه بر اساس جای چهره</string>
+    <string name="avatar_cols">ستون‌های شیت: %1$d</string>
+    <string name="avatar_rows">ردیف‌های شیت: %1$d</string>
+    <string name="avatar_fps">سرعت انیمیشن: %1$d فریم بر ثانیه</string>
+    <string name="avatar_scale">اندازه: %1$d٪ چهره</string>
+    <string name="avatar_offset">جابه‌جایی عمودی: %1$d٪ (منفی = بالا)</string>
+    <string name="avatar_flip">قرینه هنگام حرکت به چپ</string>
+    <string name="avatar_info">با تشخیص چهرهٔ خود دوربین دنبال صورت می‌رود: بدون مدل هوش مصنوعی و بدون API آنلاین. شیت ۱×۱ یعنی یک عکس ساده. آواتار تنظیم‌شده در OBS اولویت دارد.</string>
 </resources>

@@ -1,5 +1,8 @@
 #include "protocol/messages.h"
 
+#include "crypto/hex.h"
+#include "protocol/constants.h"
+
 #include <cmath>
 #include <algorithm>
 
@@ -41,6 +44,22 @@ void parseAudio(const json::Value &v, AudioRequest &out)
 	out.channels = int(v.getInt("channels", out.channels));
 }
 
+int clampInt(int64_t v, int lo, int hi) { return (int)std::clamp<int64_t>(v, lo, hi); }
+
+void parseAvatar(const json::Value &v, AvatarConfig &out)
+{
+	out.enabled = v.getBool("enabled", false);
+	out.image = v.getString("image");
+	out.size = std::clamp<int64_t>(v.getInt("size", 0), 0, (int64_t)kAvatarMaxBytes);
+	out.mode = v.getString("mode", "animate") == "position" ? "position" : "animate";
+	out.cols = clampInt(v.getInt("cols", 1), 1, 16);
+	out.rows = clampInt(v.getInt("rows", 1), 1, 16);
+	out.fps = clampInt(v.getInt("fps", 12), 1, 30);
+	out.scale = clampInt(v.getInt("scale", 150), 50, 300);
+	out.offset_y = clampInt(v.getInt("offset_y", -10), -100, 100);
+	out.flip = v.getBool("flip", false);
+}
+
 }
 
 const char *msgTypeName(MsgType type)
@@ -70,6 +89,8 @@ const char *msgTypeName(MsgType type)
 		return "error";
 	case MsgType::Bye:
 		return "bye";
+	case MsgType::AvatarChunk:
+		return "avatar_chunk";
 	default:
 		return "unknown";
 	}
@@ -101,6 +122,8 @@ MsgType messageTypeFromName(const std::string &name)
 		return MsgType::Error;
 	if (name == "bye")
 		return MsgType::Bye;
+	if (name == "avatar_chunk")
+		return MsgType::AvatarChunk;
 	return MsgType::Unknown;
 }
 
@@ -163,6 +186,7 @@ Message makeConfig(const ConfigMessage &config)
 	m.type = MsgType::Config;
 	m.config = config;
 	m.config.has_video = m.config.has_camera = m.config.has_audio = m.config.has_stream = true;
+	m.config.has_avatar = true;
 	return m;
 }
 
@@ -215,6 +239,18 @@ Message makeBye(const std::string &reason)
 	return m;
 }
 
+Message makeAvatarChunk(const std::string &id, int64_t offset, int64_t total,
+			const uint8_t *data, size_t len)
+{
+	Message m;
+	m.type = MsgType::AvatarChunk;
+	m.chunk.id = id;
+	m.chunk.offset = offset;
+	m.chunk.total = total;
+	m.chunk.data = toHex(data, len);
+	return m;
+}
+
 json::Value configToJson(const ConfigMessage &c)
 {
 	json::Value out = json::Value::object();
@@ -254,6 +290,20 @@ json::Value configToJson(const ConfigMessage &c)
 		json::Value v = json::Value::object();
 		v.set("active", c.stream.active);
 		out.set("stream", v);
+	}
+	if (c.has_avatar) {
+		json::Value v = json::Value::object();
+		v.set("enabled", c.avatar.enabled);
+		v.set("image", c.avatar.image);
+		v.set("size", c.avatar.size);
+		v.set("mode", c.avatar.mode);
+		v.set("cols", c.avatar.cols);
+		v.set("rows", c.avatar.rows);
+		v.set("fps", c.avatar.fps);
+		v.set("scale", c.avatar.scale);
+		v.set("offset_y", c.avatar.offset_y);
+		v.set("flip", c.avatar.flip);
+		out.set("avatar", v);
 	}
 	return out;
 }
@@ -326,6 +376,12 @@ json::Value toJson(const Message &msg)
 		break;
 	case MsgType::Bye:
 		out.set("reason", msg.reason);
+		break;
+	case MsgType::AvatarChunk:
+		out.set("id", msg.chunk.id);
+		out.set("offset", msg.chunk.offset);
+		out.set("total", msg.chunk.total);
+		out.set("data", msg.chunk.data);
 		break;
 	default:
 		break;
@@ -411,6 +467,10 @@ Message parseMessage(const std::string &payload, std::string *error)
 			out.config.stream.active =
 			    root["stream"].getBool("active", out.config.stream.active);
 		}
+		if (root.has("avatar")) {
+			out.config.has_avatar = true;
+			parseAvatar(root["avatar"], out.config.avatar);
+		}
 		break;
 	case MsgType::Stats:
 		out.stats.fps = root.getNumber("fps", 0);
@@ -436,6 +496,12 @@ Message parseMessage(const std::string &payload, std::string *error)
 		break;
 	case MsgType::Bye:
 		out.reason = root.getString("reason");
+		break;
+	case MsgType::AvatarChunk:
+		out.chunk.id = root.getString("id");
+		out.chunk.offset = root.getInt("offset", 0);
+		out.chunk.total = root.getInt("total", 0);
+		out.chunk.data = root.getString("data");
 		break;
 	default:
 		break;

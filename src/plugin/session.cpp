@@ -17,6 +17,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 
@@ -195,6 +196,12 @@ void Session::sendConfig()
 	cfg.audio.channels = 1;
 	cfg.has_stream = true;
 	cfg.stream.active = copy.streamActive;
+	cfg.has_avatar = true;
+	cfg.avatar = copy.avatar;
+	if (!copy.avatarData) {
+		cfg.avatar.image.clear();
+		cfg.avatar.size = 0;
+	}
 	blog(LOG_INFO, "[obs-phone-camera] config for %s: active=%s %dx%d @ %d fps",
 	     peerName.c_str(), copy.streamActive ? "true" : "false",
 	     cfg.video.width, cfg.video.height, cfg.video.fps);
@@ -523,7 +530,8 @@ bool Session::authenticatedLoop(std::string *err)
 				*err = "socket closed";
 			return false;
 		}
-		if (selectReadable(fd, 250)) {
+		bool uploading = pumpAvatarUpload();
+		if (selectReadable(fd, uploading ? 0 : 250)) {
 			uint8_t buf[8192];
 			int n = recv((SOCKET)fd, reinterpret_cast<char *>(buf), sizeof(buf), 0);
 			if (n <= 0) {
@@ -616,8 +624,11 @@ bool Session::handleMessage(const std::string &payload)
 	}
 	case MsgType::Ping:
 		return sendMessage(makePong(msg.t));
-	case MsgType::Ready:
+	case MsgType::Ready: {
+		phoneAvatar = msg.caps["features"].getBool("avatar", false);
+		phoneAvatarHave = msg.caps.getString("avatar_have");
 		return true;
+	}
 	case MsgType::Error:
 		blog(LOG_WARNING, "[obs-phone-camera] phone error: %s %s", msg.code.c_str(),
 		     msg.msg.c_str());
@@ -629,6 +640,50 @@ bool Session::handleMessage(const std::string &payload)
 	default:
 		return true;
 	}
+}
+
+// Sends the avatar image in bounded bursts so pings and reads keep flowing.
+// Returns true while more chunks remain.
+bool Session::pumpAvatarUpload()
+{
+	if (!phoneAvatar)
+		return false;
+	std::shared_ptr<const std::vector<uint8_t>> data;
+	std::string id;
+	{
+		std::lock_guard<std::mutex> lock(settingsMutex);
+		if (settings.avatar.enabled) {
+			data = settings.avatarData;
+			id = settings.avatar.image;
+		}
+	}
+	if (!data || data->empty() || id.empty() || id == avatarSentId)
+		return false;
+	if (id == phoneAvatarHave) {
+		avatarSentId = id;
+		return false;
+	}
+	if (id != avatarUploadId) {
+		avatarUploadId = id;
+		avatarUploadOffset = 0;
+	}
+
+	size_t budget = 16 * kAvatarChunkBytes;
+	while (budget > 0 && avatarUploadOffset < data->size()) {
+		size_t n = std::min(kAvatarChunkBytes, data->size() - avatarUploadOffset);
+		if (!sendMessage(makeAvatarChunk(id, (int64_t)avatarUploadOffset,
+						 (int64_t)data->size(),
+						 data->data() + avatarUploadOffset, n)))
+			return false;
+		avatarUploadOffset += n;
+		budget -= std::min(budget, n);
+	}
+	if (avatarUploadOffset < data->size())
+		return true;
+	avatarSentId = id;
+	blog(LOG_INFO, "[obs-phone-camera] avatar image sent to %s (%zu bytes)",
+	     peerName.c_str(), data->size());
+	return false;
 }
 
 void Session::videoLoop()

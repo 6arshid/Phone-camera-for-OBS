@@ -33,6 +33,8 @@ struct SessionSettings {
 	bool audioEnabled = false;
 	bool streamActive = false;
 	std::string aspect = "source";
+	AvatarConfig avatar;
+	std::shared_ptr<const std::vector<uint8_t>> avatarData; // file bytes, hash in avatar.image
 };
 
 class SessionListener {
@@ -87,6 +89,7 @@ private:
 	bool handshakePhase(std::string *err);
 	bool authenticatedLoop(std::string *err);
 	bool handleMessage(const std::string &payload);
+	bool pumpAvatarUpload();
 	bool sendMessage(const Message &msg);
 	bool sendRaw(const std::vector<uint8_t> &frame);
 	void pushVideo(ReassembledFrame &&frame);
@@ -142,6 +145,13 @@ private:
 	std::mutex thermalMutex;
 	std::string thermalState;
 	std::atomic<uint64_t> lastPingSentNs{0};
+
+	// Avatar upload state, touched only by the control thread.
+	bool phoneAvatar = false;
+	std::string phoneAvatarHave;
+	std::string avatarUploadId;
+	size_t avatarUploadOffset = 0;
+	std::string avatarSentId;
 
 	std::thread controlThread;
 	std::thread videoThread;

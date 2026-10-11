@@ -280,6 +280,42 @@ Standard codes: `pairing_failed`, `auth_failed`, `protocol_error`,
 **bye** — `{"type":"bye","reason":"shutdown"}`; either side may send it
 before closing the TCP connection.
 
+### 3.3 Face avatar extension
+
+Optional; see [FACE-AVATAR.md](FACE-AVATAR.md). A client that supports it adds
+`"avatar":true` to `ready.caps.features` and reports the SHA-256 (lowercase
+hex) of the OBS image it has cached as `ready.caps.avatar_have` (empty string
+when none).
+
+`config` carries:
+
+```json
+"avatar":{"enabled":true,"image":"<64-hex sha256 or empty>","size":183422,
+          "mode":"animate","cols":4,"rows":1,"fps":12,
+          "scale":150,"offset_y":-10,"flip":false}
+```
+
+* `mode` — `"animate"` | `"position"`; `cols`/`rows` 1..16; `fps` 1..30;
+  `scale` 50..300 (% of face height); `offset_y` −100..100 (% of face height,
+  negative = up). Receivers clamp out-of-range values.
+* `size` ≤ 4 194 304 bytes.
+
+When the avatar is enabled, the server has an image, the client advertised the
+feature and `avatar_have` differs from `image`, the server sends the file in
+order as encrypted control frames:
+
+```json
+{"type":"avatar_chunk","id":"<64-hex sha256>","offset":0,"total":183422,"data":"<hex>"}
+```
+
+* Chunks carry at most 24 576 bytes (49 152 hex chars), so frames stay below
+  the 65 536-byte payload limit.
+* `offset` starts at 0 and increases contiguously. A chunk with `offset = 0`
+  restarts assembly. The client discards the transfer on any gap or overflow,
+  and accepts the file only if its SHA-256 equals `id`.
+* Clients that do not know `avatar_chunk` ignore it (unknown types are ignored
+  after authentication).
+
 ## 4. Media channel (UDP)
 
 One datagram = one packet. Header (32 bytes, **big endian**, plaintext but

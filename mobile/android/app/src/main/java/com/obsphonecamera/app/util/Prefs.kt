@@ -3,6 +3,7 @@ package com.obsphonecamera.app.util
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import com.obsphonecamera.app.camera.AvatarSettings
 
 class Prefs(context: Context) {
 
@@ -56,6 +57,35 @@ class Prefs(context: Context) {
     var facePixelationStrength: Int
         get() = sp.getInt("face_pixelation_strength", 50).coerceIn(1, 100)
         set(value) = sp.edit().putInt("face_pixelation_strength", value.coerceIn(1, 100)).apply()
+
+    var avatarEnabled: Boolean
+        get() = sp.getBoolean("avatar_enabled", false)
+        set(value) = sp.edit().putBoolean("avatar_enabled", value).apply()
+
+    var avatarObsHash: String
+        get() = sp.getString("avatar_obs_hash", "") ?: ""
+        set(value) = sp.edit().putString("avatar_obs_hash", value).apply()
+
+    /** Local (phone-picked) avatar settings. */
+    var avatarSettings: AvatarSettings
+        get() = AvatarSettings(
+            mode = if (sp.getString("avatar_mode", "animate") == "position") "position" else "animate",
+            cols = sp.getInt("avatar_cols", 1).coerceIn(1, 16),
+            rows = sp.getInt("avatar_rows", 1).coerceIn(1, 16),
+            fps = sp.getInt("avatar_fps", 12).coerceIn(1, 30),
+            scale = sp.getInt("avatar_scale", 150).coerceIn(50, 300),
+            offsetY = sp.getInt("avatar_offset_y", -10).coerceIn(-100, 100),
+            flip = sp.getBoolean("avatar_flip", false),
+        )
+        set(value) = sp.edit()
+            .putString("avatar_mode", value.mode)
+            .putInt("avatar_cols", value.cols)
+            .putInt("avatar_rows", value.rows)
+            .putInt("avatar_fps", value.fps)
+            .putInt("avatar_scale", value.scale)
+            .putInt("avatar_offset_y", value.offsetY)
+            .putBoolean("avatar_flip", value.flip)
+            .apply()
 
     var lastFps: Int
         get() = sp.getInt(KEY_LAST_FPS, 30)

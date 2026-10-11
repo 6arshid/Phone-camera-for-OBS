@@ -22,6 +22,7 @@ enum class MsgType {
 	Pong,
 	Error,
 	Bye,
+	AvatarChunk,
 };
 
 struct DeviceInfo {
@@ -64,15 +65,38 @@ struct StreamState {
 	bool active = true;
 };
 
+// Image or character sheet drawn over tracked faces by the phone.
+struct AvatarConfig {
+	bool enabled = false;
+	std::string image; // SHA-256 hex of the file, empty = none
+	int64_t size = 0;
+	std::string mode = "animate"; // "animate" | "position"
+	int cols = 1;
+	int rows = 1;
+	int fps = 12;
+	int scale = 150;    // percent of face height
+	int offset_y = -10; // percent of face height, negative = up
+	bool flip = false;  // mirror sprite when moving left
+};
+
 struct ConfigMessage {
 	VideoRequest video;
 	CameraControl camera;
 	AudioRequest audio;
 	StreamState stream;
+	AvatarConfig avatar;
 	bool has_video = false;
 	bool has_camera = false;
 	bool has_audio = false;
 	bool has_stream = false;
+	bool has_avatar = false;
+};
+
+struct AvatarChunkMessage {
+	std::string id; // SHA-256 hex of the whole file
+	int64_t offset = 0;
+	int64_t total = 0;
+	std::string data; // hex
 };
 
 struct StatsMessage {
@@ -110,6 +134,7 @@ struct Message {
 	ConfigMessage config;
 	StatsMessage stats;
 	HintMessage hint;
+	AvatarChunkMessage chunk;
 
 	int64_t t = 0;
 	std::string code;
@@ -134,6 +159,8 @@ Message makePing(int64_t t);
 Message makePong(int64_t t);
 Message makeError(const std::string &code, const std::string &msg);
 Message makeBye(const std::string &reason);
+Message makeAvatarChunk(const std::string &id, int64_t offset, int64_t total,
+			const uint8_t *data, size_t len);
 
 json::Value toJson(const Message &msg);
 json::Value configToJson(const ConfigMessage &config);

@@ -69,11 +69,93 @@ data class AudioConfig(
     val channels: Int,
 )
 
+/** OBS-side face avatar; [image] is the SHA-256 hex of the file sent via avatar_chunk. */
+data class AvatarConfig(
+    val enabled: Boolean = false,
+    val image: String = "",
+    val size: Int = 0,
+    val mode: String = "animate",
+    val cols: Int = 1,
+    val rows: Int = 1,
+    val fps: Int = 12,
+    val scale: Int = 150,
+    val offsetY: Int = -10,
+    val flip: Boolean = false,
+) {
+    val hasImage: Boolean get() = enabled && image.isNotEmpty() && size > 0
+
+    companion object {
+        const val MAX_BYTES = 4 * 1024 * 1024
+
+        fun parse(o: JSONObject?): AvatarConfig {
+            if (o == null) return AvatarConfig()
+            val image = o.optString("image").lowercase()
+            return AvatarConfig(
+                enabled = o.optBoolean("enabled", false),
+                image = if (com.obsphonecamera.app.util.Hex.isValidHex(image, 64)) image else "",
+                size = o.optInt("size", 0).coerceIn(0, MAX_BYTES),
+                mode = if (o.optString("mode") == "position") "position" else "animate",
+                cols = o.optInt("cols", 1).coerceIn(1, 16),
+                rows = o.optInt("rows", 1).coerceIn(1, 16),
+                fps = o.optInt("fps", 12).coerceIn(1, 30),
+                scale = o.optInt("scale", 150).coerceIn(50, 300),
+                offsetY = o.optInt("offset_y", -10).coerceIn(-100, 100),
+                flip = o.optBoolean("flip", false),
+            )
+        }
+    }
+}
+
+/** Reassembles avatar_chunk frames in order and verifies the SHA-256 id. */
+class AvatarAssembler {
+    private var id = ""
+    private var buffer: ByteArray? = null
+    private var filled = 0
+
+    /** Returns (id, bytes) once the final chunk of a verified file arrives. */
+    fun accept(json: String): Pair<String, ByteArray>? {
+        val o = try { JSONObject(json) } catch (_: Exception) { return null }
+        val chunkId = o.optString("id").lowercase()
+        val total = o.optInt("total", -1)
+        val offset = o.optInt("offset", -1)
+        val data = try { com.obsphonecamera.app.util.Hex.decode(o.optString("data")) } catch (_: Exception) { null }
+        if (!com.obsphonecamera.app.util.Hex.isValidHex(chunkId, 64) || total !in 1..AvatarConfig.MAX_BYTES || data == null) {
+            reset()
+            return null
+        }
+        if (offset == 0) {
+            id = chunkId
+            buffer = ByteArray(total)
+            filled = 0
+        }
+        val buf = buffer
+        if (buf == null || chunkId != id || buf.size != total || offset != filled || offset + data.size > total) {
+            reset()
+            return null
+        }
+        data.copyInto(buf, offset)
+        filled += data.size
+        if (filled < total) return null
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(buf)
+        val ok = com.obsphonecamera.app.util.Hex.encode(digest) == id
+        val result = id to buf
+        reset()
+        return if (ok) result else null
+    }
+
+    fun reset() {
+        id = ""
+        buffer = null
+        filled = 0
+    }
+}
+
 data class StreamConfig(
     val video: VideoConfig,
     val camera: CameraControlConfig,
     val audio: AudioConfig,
     val active: Boolean,
+    val avatar: AvatarConfig = AvatarConfig(),
 ) {
     companion object {
         fun parse(json: String): StreamConfig {
@@ -109,6 +191,7 @@ data class StreamConfig(
                     channels = a.optInt("channels", 1),
                 ),
                 active = o.optJSONObject("stream")?.optBoolean("active", false) ?: false,
+                avatar = AvatarConfig.parse(o.optJSONObject("avatar")),
             )
         }
     }

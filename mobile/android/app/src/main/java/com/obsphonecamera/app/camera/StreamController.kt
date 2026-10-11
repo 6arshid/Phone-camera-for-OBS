@@ -60,6 +60,9 @@ class StreamController(
         torch = false,
     )
 
+    @Volatile
+    private var avatar: GlPipeline.AvatarSpec? = null
+
     val isRunning: Boolean get() = running
 
     fun listCameras(): List<CameraEntry> = camera.listCameras()
@@ -101,6 +104,12 @@ class StreamController(
         controls = cfg
         camera.applyControls(cfg)
         gl?.setFacePixelation(cfg.facePixelation, cfg.facePixelationStrength)
+    }
+
+    fun setAvatar(spec: GlPipeline.AvatarSpec?) {
+        avatar = spec
+        camera.setAvatarTracking(spec != null)
+        gl?.setAvatar(spec)
     }
 
     fun requestKeyFrame() {
@@ -163,6 +172,7 @@ class StreamController(
                 return
             }
             pipeline.setFacePixelation(controls.facePixelation, controls.facePixelationStrength)
+            pipeline.setAvatar(avatar)
             gl = pipeline
             camera.onFaces = { faces -> pipeline.updateFaces(faces) }
             val ft = HandlerThread("ocp-frame").also { it.start() }
@@ -183,6 +193,7 @@ class StreamController(
         runningConfig = config
         running = true
 
+        camera.setAvatarTracking(avatar != null)
         camera.open(entry.id, pipeline.getCameraSurface(), cameraSize, config.fps) {
             camera.applyControls(controls)
         }

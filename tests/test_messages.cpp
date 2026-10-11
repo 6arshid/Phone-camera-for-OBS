@@ -83,6 +83,68 @@ TEST(messages_config_round_trip)
 	CHECK(back.config.stream.active);
 }
 
+TEST(messages_avatar_config_round_trip)
+{
+	ConfigMessage cfg;
+	cfg.avatar.enabled = true;
+	cfg.avatar.image = std::string(64, 'c');
+	cfg.avatar.size = 12345;
+	cfg.avatar.mode = "position";
+	cfg.avatar.cols = 3;
+	cfg.avatar.rows = 2;
+	cfg.avatar.fps = 20;
+	cfg.avatar.scale = 175;
+	cfg.avatar.offset_y = -25;
+	cfg.avatar.flip = true;
+
+	std::string err;
+	Message back = parseMessage(roundTrip(makeConfig(cfg)), &err);
+	CHECK(err.empty());
+	CHECK(back.config.has_avatar);
+	CHECK(back.config.avatar.enabled);
+	CHECK_STR_EQ(back.config.avatar.image, std::string(64, 'c'));
+	CHECK_EQ((int)back.config.avatar.size, 12345);
+	CHECK_STR_EQ(back.config.avatar.mode, "position");
+	CHECK_EQ(back.config.avatar.cols, 3);
+	CHECK_EQ(back.config.avatar.rows, 2);
+	CHECK_EQ(back.config.avatar.fps, 20);
+	CHECK_EQ(back.config.avatar.scale, 175);
+	CHECK_EQ(back.config.avatar.offset_y, -25);
+	CHECK(back.config.avatar.flip);
+}
+
+TEST(messages_avatar_config_clamped)
+{
+	std::string err;
+	Message m = parseMessage(
+		R"({"type":"config","avatar":{"enabled":true,"mode":"bogus","cols":99,"rows":0,"scale":5,"fps":500}})",
+		&err);
+	CHECK(err.empty());
+	CHECK(m.config.has_avatar);
+	CHECK_STR_EQ(m.config.avatar.mode, "animate");
+	CHECK_EQ(m.config.avatar.cols, 16);
+	CHECK_EQ(m.config.avatar.rows, 1);
+	CHECK_EQ(m.config.avatar.scale, 50);
+	CHECK_EQ(m.config.avatar.fps, 30);
+	Message legacy = parseMessage(R"({"type":"config","video":{"camera":"front"}})", &err);
+	CHECK(!legacy.config.has_avatar);
+	CHECK(!legacy.config.avatar.enabled);
+}
+
+TEST(messages_avatar_chunk_round_trip)
+{
+	const uint8_t bytes[] = {0x89, 'P', 'N', 'G', 0x00, 0xff};
+	Message msg = makeAvatarChunk(std::string(64, 'a'), 24576, 30000, bytes, sizeof(bytes));
+	std::string err;
+	Message back = parseMessage(roundTrip(msg), &err);
+	CHECK(err.empty());
+	CHECK(back.type == MsgType::AvatarChunk);
+	CHECK_STR_EQ(back.chunk.id, std::string(64, 'a'));
+	CHECK_EQ((int)back.chunk.offset, 24576);
+	CHECK_EQ((int)back.chunk.total, 30000);
+	CHECK_STR_EQ(back.chunk.data, "89504e4700ff");
+}
+
 TEST(messages_partial_config)
 {
 	std::string err;
