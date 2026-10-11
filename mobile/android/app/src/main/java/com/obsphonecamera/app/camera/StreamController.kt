@@ -173,6 +173,7 @@ class StreamController(
         }
 
         val pipeline = gl ?: return
+        pipeline.setCameraTransform(entry.sensorOrientation, entry.facingFront)
         pipeline.setRotation(rotation)
         pipeline.mirror = entry.facingFront
         pipeline.updateTextureBufferSize(cameraSize.width, cameraSize.height)
@@ -237,7 +238,7 @@ class StreamController(
     }
 
     private fun applyRotation(cfg: PipelineConfig) {
-        val entry = camera.listCameras().firstOrNull { it.id == resolveCameraId(cfg.camera) } ?: return
+        val entry = camera.listCameras().firstOrNull { it.id == camera.currentCameraId } ?: return
         gl?.setRotation(rotationFor(entry, cfg.orientation))
         gl?.mirror = entry.facingFront
     }

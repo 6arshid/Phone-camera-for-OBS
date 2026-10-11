@@ -44,7 +44,9 @@ class GlPipeline {
 
     private val stMatrix = FloatArray(16)
     private val mvpMatrix = FloatArray(16)
-    private val tmpMatrix = FloatArray(16)
+    private val correctedStMatrix = FloatArray(16)
+    private var sensorOrientation = 0
+    private var cameraFront = false
 
     @Volatile
     var rotationDegrees = 0
@@ -53,6 +55,8 @@ class GlPipeline {
     @Volatile
     var mirror = false
 
+    private var cameraWidth = 0
+    private var cameraHeight = 0
     private var encoderWidth = 0
     private var encoderHeight = 0
     private var previewWidth = 0
@@ -125,8 +129,17 @@ class GlPipeline {
         }, handler)
     }
 
+    @Synchronized
     fun updateTextureBufferSize(w: Int, h: Int) {
+        cameraWidth = w
+        cameraHeight = h
         surfaceTexture?.setDefaultBufferSize(w, h)
+    }
+
+    @Synchronized
+    fun setCameraTransform(sensorDegrees: Int, front: Boolean) {
+        sensorOrientation = sensorDegrees
+        cameraFront = front
     }
 
     @Synchronized
@@ -257,12 +270,23 @@ class GlPipeline {
 
     private fun updateMvp() {
         Matrix.setIdentityM(mvpMatrix, 0)
-        if (mirror) {
-            Matrix.setIdentityM(tmpMatrix, 0)
-            Matrix.scaleM(tmpMatrix, 0, -1f, 1f, 1f)
-            Matrix.multiplyMM(mvpMatrix, 0, mvpMatrix, 0, tmpMatrix, 0)
+        if (cameraWidth > 0 && cameraHeight > 0) {
+            val swap = rotationDegrees % 180 != 0
+            val imageAspect = if (swap) cameraHeight.toFloat() / cameraWidth else cameraWidth.toFloat() / cameraHeight
+            val outputAspect = encoderWidth.toFloat() / encoderHeight
+            if (imageAspect > outputAspect) {
+                Matrix.scaleM(mvpMatrix, 0, 1f, outputAspect / imageAspect, 1f)
+            } else {
+                Matrix.scaleM(mvpMatrix, 0, imageAspect / outputAspect, 1f, 1f)
+            }
         }
-        Matrix.rotateM(mvpMatrix, 0, rotationDegrees.toFloat(), 0f, 0f, 1f)
+        // Camera2 already includes sensor rotation and front mirroring in uST.
+        // Remove that orientation before applying the requested one, preserving
+        // the producer's crop and GL vertical flip.
+        val corrected = CameraTextureTransform.correct(
+            stMatrix, sensorOrientation, cameraFront, rotationDegrees, mirror,
+        )
+        corrected.copyInto(correctedStMatrix)
     }
 
     private fun draw() {
@@ -273,7 +297,7 @@ class GlPipeline {
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTextureId)
         GLES20.glUniform1i(textureLoc, 0)
         GLES20.glUniformMatrix4fv(mvpLoc, 1, false, mvpMatrix, 0)
-        GLES20.glUniformMatrix4fv(stLoc, 1, false, stMatrix, 0)
+        GLES20.glUniformMatrix4fv(stLoc, 1, false, correctedStMatrix, 0)
         GLES20.glEnableVertexAttribArray(positionLoc)
         GLES20.glVertexAttribPointer(positionLoc, 2, GLES20.GL_FLOAT, false, 0, positionBuffer)
         GLES20.glEnableVertexAttribArray(texCoordLoc)

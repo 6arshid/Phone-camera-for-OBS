@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.OrientationEventListener
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.WindowManager
@@ -22,12 +23,28 @@ class MainActivity : Activity(), SessionManager.Listener {
     private var scanner: QrScanSession? = null
     private var scanRequested = false
     private var resumed = false
+    private lateinit var orientationListener: OrientationEventListener
+    private var lastDeviceDegrees = -1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         prefs = Prefs(this)
         session = SessionManager(this, prefs, this)
+        orientationListener = object : OrientationEventListener(this) {
+            override fun onOrientationChanged(orientation: Int) {
+                if (orientation == ORIENTATION_UNKNOWN) return
+                // Sensor angles run opposite to display rotation. Keep a dead
+                // zone near quadrant boundaries to prevent orientation jitter.
+                val degrees = ((360 - orientation + 45) / 90 * 90) % 360
+                val distance = if (lastDeviceDegrees < 0) 180 else
+                    kotlin.math.abs(((360 - orientation - lastDeviceDegrees + 540) % 360) - 180)
+                if (degrees != lastDeviceDegrees && distance >= 55) {
+                    lastDeviceDegrees = degrees
+                    session.setDeviceDegrees(degrees)
+                }
+            }
+        }
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(24, 24, 24, 24)
@@ -42,7 +59,7 @@ class MainActivity : Activity(), SessionManager.Listener {
         fun button(textId: Int, action: () -> Unit) {
             layout.addView(Button(this).apply { setText(textId); setOnClickListener { action() } })
         }
-        label(getString(R.string.home_title) + "  1.0.2").textSize = 21f
+        label(getString(R.string.home_title) + "  1.0.3").textSize = 21f
         status = label(getString(R.string.status_idle))
         label(getString(R.string.scan_hint))
         button(R.string.btn_scan_qr) {
@@ -86,7 +103,7 @@ class MainActivity : Activity(), SessionManager.Listener {
             override fun surfaceCreated(holder: SurfaceHolder) = Unit
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
                 session.setPreviewSurface(holder.surface, width, height)
-                session.setDeviceDegrees(windowManager.defaultDisplay.rotation * 90)
+                if (lastDeviceDegrees < 0) session.setDeviceDegrees(windowManager.defaultDisplay.rotation * 90)
                 startScannerIfReady()
             }
             override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -128,8 +145,8 @@ class MainActivity : Activity(), SessionManager.Listener {
     }
 
     private fun stopScanner() { scanner?.stop(); scanner = null }
-    override fun onResume() { super.onResume(); resumed = true; if (::preview.isInitialized) startScannerIfReady() }
-    override fun onStop() { resumed = false; scanRequested = false; stopScanner(); session.disconnect(true); super.onStop() }
+    override fun onResume() { super.onResume(); orientationListener.enable(); resumed = true; if (::preview.isInitialized) startScannerIfReady() }
+    override fun onStop() { orientationListener.disable(); resumed = false; scanRequested = false; stopScanner(); session.disconnect(true); super.onStop() }
     override fun onDestroy() { session.close(); super.onDestroy() }
     override fun onStateChanged(state: SessionState, detail: String) {
         runOnUiThread {

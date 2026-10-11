@@ -1,5 +1,21 @@
 # Android APK
 
+## Version 1.0.3
+
+Fixes sideways video caused by applying sensor rotation/mirroring twice:
+Camera2's SurfaceTexture transform is compensated before the requested
+orientation is applied, while preserving producer crop. Both preview and OBS
+use the corrected image. Camera frames retain their aspect ratio with letterboxing.
+Auto orientation follows the physical phone sensor even when screen rotation
+is locked, with a dead zone to avoid jitter. Orientation updates use the active
+camera after switching between front and back.
+
+Validation: three texture-transform regression tests pass (front/back portrait,
+landscape, crop preservation); debug APK builds successfully. Physical-phone
+preview and OBS streaming still require verification.
+
+Install `Phone-Camera-for-OBS-1.0.3.apk` over the existing Android app.
+
 ## Version 1.0.2
 
 The Android home screen now uses QR scanning instead of manual IP entry, shows
