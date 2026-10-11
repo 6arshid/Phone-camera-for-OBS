@@ -1,6 +1,7 @@
 #include "protocol/messages.h"
 
 #include <cmath>
+#include <algorithm>
 
 namespace ocp {
 
@@ -29,6 +30,8 @@ void parseCamera(const json::Value &v, CameraControl &out)
 	out.wb_mode = v.getString("wb_mode", out.wb_mode);
 	out.wb_kelvin = v.getNumber("wb_kelvin", out.wb_kelvin);
 	out.torch = v.getBool("torch", out.torch);
+	out.face_pixelation = v.getBool("face_pixelation", false);
+	out.face_pixelation_strength = (int)std::clamp<int64_t>(v.getInt("face_pixelation_strength", 50), 1, 100);
 }
 
 void parseAudio(const json::Value &v, AudioRequest &out)
@@ -236,6 +239,8 @@ json::Value configToJson(const ConfigMessage &c)
 		v.set("wb_mode", c.camera.wb_mode);
 		v.set("wb_kelvin", round1(c.camera.wb_kelvin));
 		v.set("torch", c.camera.torch);
+		v.set("face_pixelation", c.camera.face_pixelation);
+		v.set("face_pixelation_strength", c.camera.face_pixelation_strength);
 		out.set("camera", v);
 	}
 	if (c.has_audio) {

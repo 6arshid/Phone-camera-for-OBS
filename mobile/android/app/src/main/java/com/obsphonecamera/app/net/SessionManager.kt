@@ -247,12 +247,24 @@ class SessionManager(
         }
     }
 
+    fun userSetFacePixelation(enabled: Boolean, strength: Int) {
+        executor.execute {
+            prefs.facePixelation = enabled
+            prefs.facePixelationStrength = strength
+            config?.let { stream?.applyControls(effectiveCameraControls(it.camera)) }
+        }
+    }
+
+    private fun effectiveCameraControls(camera: CameraControlConfig): CameraControlConfig {
+        return camera.withLocalFacePixelation(prefs.facePixelation, prefs.facePixelationStrength)
+    }
+
     fun userSetTorch(on: Boolean) {
         executor.execute {
             val cfg = config ?: return@execute
             val camCfg = cfg.camera.copy(torch = on)
             config = cfg.copy(camera = camCfg)
-            stream?.applyControls(camCfg)
+            stream?.applyControls(effectiveCameraControls(camCfg))
         }
     }
 
@@ -261,7 +273,7 @@ class SessionManager(
             val cfg = config ?: return@execute
             val camCfg = cfg.camera.copy(focusMode = mode, focusDistance = distance)
             config = cfg.copy(camera = camCfg)
-            stream?.applyControls(camCfg)
+            stream?.applyControls(effectiveCameraControls(camCfg))
         }
     }
 
@@ -270,7 +282,7 @@ class SessionManager(
             val cfg = config ?: return@execute
             val camCfg = cfg.camera.copy(exposureMode = "auto", exposureBias = bias)
             config = cfg.copy(camera = camCfg)
-            stream?.applyControls(camCfg)
+            stream?.applyControls(effectiveCameraControls(camCfg))
         }
     }
 
@@ -279,7 +291,7 @@ class SessionManager(
             val cfg = config ?: return@execute
             val camCfg = cfg.camera.copy(wbMode = mode, wbKelvin = kelvin)
             config = cfg.copy(camera = camCfg)
-            stream?.applyControls(camCfg)
+            stream?.applyControls(effectiveCameraControls(camCfg))
         }
     }
 
@@ -619,7 +631,7 @@ class SessionManager(
         } else {
             stopPipeline()
         }
-        stream?.applyControls(cfg.camera)
+        stream?.applyControls(effectiveCameraControls(cfg.camera))
         applyMicState()
     }
 
@@ -641,6 +653,7 @@ class SessionManager(
     private fun startPipeline(cfg: StreamConfig) {
         val s = stream ?: return
         streamStartNs = System.nanoTime()
+        s.applyControls(effectiveCameraControls(cfg.camera))
         s.start(
             StreamController.PipelineConfig(
                 camera = s.resolveCameraId(cfg.video.camera),

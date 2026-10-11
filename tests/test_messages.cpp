@@ -56,6 +56,8 @@ TEST(messages_config_round_trip)
 	cfg.camera.focus_mode = "manual";
 	cfg.camera.focus_distance = 0.7;
 	cfg.camera.torch = true;
+	cfg.camera.face_pixelation = true;
+	cfg.camera.face_pixelation_strength = 82;
 	cfg.camera.wb_kelvin = 4300;
 	cfg.audio.enabled = true;
 	cfg.stream.active = true;
@@ -67,6 +69,8 @@ TEST(messages_config_round_trip)
 	Message back = parseMessage(payload, &err);
 	CHECK(back.config.has_video);
 	CHECK(back.config.has_camera);
+	CHECK(back.config.camera.face_pixelation);
+	CHECK_EQ(back.config.camera.face_pixelation_strength, 82);
 	CHECK(back.config.has_audio);
 	CHECK(back.config.has_stream);
 	CHECK_EQ(back.config.video.width, 1920);

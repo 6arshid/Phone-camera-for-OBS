@@ -76,4 +76,7 @@
     <string name="res_480">854×480</string>
     <string name="thermal_nominal">عادی</string>
     <string name="preview_placeholder">برای شروع پخش، منبع «Phone Camera» را در OBS فعال کنید</string>
+    <string name="face_pixelation">شطرنجی‌کردن چهره</string>
+    <string name="face_strength">شدت شطرنجی‌شدن: %1$d</string>
+    <string name="face_info">اگر تشخیص چهره قطع شود یا پشتیبانی نشود، کل تصویر شطرنجی می‌شود. فعال‌بودن کلید گوشی یا OBS کافی است.</string>
 </resources>

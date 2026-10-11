@@ -1,5 +1,22 @@
 # Android APK
 
+## Version 1.0.4
+
+Adds a persistent **Pixelate faces** switch and strength slider (1..100) on
+Android and matching controls in the Windows OBS source properties. Camera2
+face metadata drives a GPU mosaic applied to both preview and encoder input.
+No additional AI model or cloud service is used. Either endpoint can enable
+the effect; when both do, the higher strength wins. Missing, stale or unsupported
+face tracking pixelates the whole image. See [face pixelation](../docs/FACE-PIXELATION.md).
+
+Validation: APK builds; message and texture-transform regression tests pass;
+Windows C++ tests and the OBS module integration test pass. The full Android
+suite still has the previously documented ControlCipher counter test failure.
+No Android device was connected, so moving-face coverage and front/back camera
+alignment still need physical-device verification. iOS is not included.
+
+Install `Phone-Camera-for-OBS-1.0.4.apk` together with the updated Windows plugin.
+
 ## Version 1.0.3
 
 Fixes sideways video caused by applying sensor rotation/mirroring twice:

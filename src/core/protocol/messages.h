@@ -50,6 +50,8 @@ struct CameraControl {
 	std::string wb_mode = "auto";
 	double wb_kelvin = 5500;
 	bool torch = false;
+	bool face_pixelation = false;
+	int face_pixelation_strength = 50;
 };
 
 struct AudioRequest {

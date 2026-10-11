@@ -100,6 +100,7 @@ class StreamController(
     fun applyControls(cfg: CameraControlConfig) {
         controls = cfg
         camera.applyControls(cfg)
+        gl?.setFacePixelation(cfg.facePixelation, cfg.facePixelationStrength)
     }
 
     fun requestKeyFrame() {
@@ -161,7 +162,9 @@ class StreamController(
                 enc.stop()
                 return
             }
+            pipeline.setFacePixelation(controls.facePixelation, controls.facePixelationStrength)
             gl = pipeline
+            camera.onFaces = { faces -> pipeline.updateFaces(faces) }
             val ft = HandlerThread("ocp-frame").also { it.start() }
             frameThread = ft
             frameHandler = Handler(ft.looper)

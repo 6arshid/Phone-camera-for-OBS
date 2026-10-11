@@ -76,4 +76,7 @@
     <string name="res_480">854×480</string>
     <string name="thermal_nominal">nominal</string>
     <string name="preview_placeholder">Start the OBS \"Phone Camera\" source to begin streaming</string>
+    <string name="face_pixelation">Pixelate faces</string>
+    <string name="face_strength">Pixelation strength: %1$d</string>
+    <string name="face_info">If tracking is lost or unsupported, the whole image is pixelated. Either the phone or OBS switch enables protection.</string>
 </resources>

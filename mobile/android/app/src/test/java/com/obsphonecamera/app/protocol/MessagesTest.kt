@@ -10,6 +10,31 @@ import kotlin.test.assertTrue
 class MessagesTest {
 
     @Test
+    fun eitherEndpointCanEnablePixelationAndStrongestWins() {
+        val off = StreamConfig.parse("""{}""").camera
+        assertFalse(off.withLocalFacePixelation(false, 80).facePixelation)
+        assertEquals(80, off.withLocalFacePixelation(true, 80).facePixelationStrength)
+        assertTrue(off.withLocalFacePixelation(true, 80).facePixelation)
+        val remote = off.copy(facePixelation = true, facePixelationStrength = 70)
+        assertTrue(remote.withLocalFacePixelation(false, 80).facePixelation)
+        assertEquals(70, remote.withLocalFacePixelation(false, 80).facePixelationStrength)
+        assertEquals(70, remote.withLocalFacePixelation(true, 40).facePixelationStrength)
+        assertEquals(90, remote.withLocalFacePixelation(true, 90).facePixelationStrength)
+    }
+
+    @Test
+    fun facePixelationDefaultsAndBounds() {
+        val legacy = StreamConfig.parse("""{"type":"config"}""")
+        assertFalse(legacy.camera.facePixelation)
+        assertEquals(50, legacy.camera.facePixelationStrength)
+        val enabled = StreamConfig.parse("""{"camera":{"face_pixelation":true,"face_pixelation_strength":75}}""")
+        assertTrue(enabled.camera.facePixelation)
+        assertEquals(75, enabled.camera.facePixelationStrength)
+        assertEquals(100, StreamConfig.parse("""{"camera":{"face_pixelation_strength":999}}""").camera.facePixelationStrength)
+        assertEquals(1, StreamConfig.parse("""{"camera":{"face_pixelation_strength":-5}}""").camera.facePixelationStrength)
+    }
+
+    @Test
     fun autoVideoConfigUsesSupportedDefaults() {
         val config = StreamConfig.parse("""{"type":"config","video":{"width":0,"height":0,"fps":0}}""")
         assertEquals(1280, config.video.width)

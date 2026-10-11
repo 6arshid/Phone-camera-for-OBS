@@ -59,7 +59,7 @@ class MainActivity : Activity(), SessionManager.Listener {
         fun button(textId: Int, action: () -> Unit) {
             layout.addView(Button(this).apply { setText(textId); setOnClickListener { action() } })
         }
-        label(getString(R.string.home_title) + "  1.0.3").textSize = 21f
+        label(getString(R.string.home_title) + "  1.0.4").textSize = 21f
         status = label(getString(R.string.status_idle))
         label(getString(R.string.scan_hint))
         button(R.string.btn_scan_qr) {
@@ -95,6 +95,30 @@ class MainActivity : Activity(), SessionManager.Listener {
                 } else session.userSetMicMuted(!checked)
             }
         })
+        val faceSwitch = Switch(this).apply {
+            setText(R.string.face_pixelation)
+            setTextColor(0xfff1f5f9.toInt())
+            isChecked = prefs.facePixelation
+        }
+        layout.addView(faceSwitch)
+        val strengthLabel = label(getString(R.string.face_strength, prefs.facePixelationStrength))
+        val faceStrength = SeekBar(this).apply {
+            max = 99
+            progress = prefs.facePixelationStrength - 1
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(bar: SeekBar?, value: Int, fromUser: Boolean) {
+                    strengthLabel.text = getString(R.string.face_strength, value + 1)
+                    if (fromUser) session.userSetFacePixelation(faceSwitch.isChecked, value + 1)
+                }
+                override fun onStartTrackingTouch(bar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(bar: SeekBar?) = Unit
+            })
+        }
+        layout.addView(faceStrength)
+        faceSwitch.setOnCheckedChangeListener { _, enabled ->
+            session.userSetFacePixelation(enabled, faceStrength.progress + 1)
+        }
+        label(getString(R.string.face_info)).textSize = 12f
         session.userSetMicMuted(true)
         stats = label("")
         preview = SurfaceView(this)

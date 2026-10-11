@@ -1,6 +1,7 @@
 package com.obsphonecamera.app.camera
 
 import android.graphics.SurfaceTexture
+import android.graphics.RectF
 import android.opengl.EGL14
 import android.opengl.EGLConfig
 import android.opengl.EGLContext
@@ -38,6 +39,27 @@ class GlPipeline {
     private var mvpLoc = -1
     private var stLoc = -1
     private var textureLoc = -1
+    private var faceCountLoc = -1
+    private var faceRectsLoc = -1
+    private var pixelStepLoc = -1
+    private var faceEnabled = false
+    private var faceStrength = 50
+    private var faces = emptyList<RectF>()
+    private var facesUpdatedNs = 0L
+
+    @Synchronized
+    fun setFacePixelation(enabled: Boolean, strength: Int) {
+        if (enabled != faceEnabled) { faces = emptyList(); facesUpdatedNs = 0L }
+        faceEnabled = enabled
+        faceStrength = strength.coerceIn(1, 100)
+    }
+
+    @Synchronized
+    fun updateFaces(rects: List<RectF>) {
+        // Beyond the shader's face limit, obscure the full frame.
+        faces = if (rects.size > 8) emptyList() else rects.map { RectF(it) }
+        facesUpdatedNs = System.nanoTime()
+    }
 
     private val frameLock = Object()
     private val frameAvailable = AtomicBoolean(false)
@@ -112,6 +134,9 @@ class GlPipeline {
         mvpLoc = GLES20.glGetUniformLocation(program, "uMVP")
         stLoc = GLES20.glGetUniformLocation(program, "uST")
         textureLoc = GLES20.glGetUniformLocation(program, "s_texture")
+        faceCountLoc = GLES20.glGetUniformLocation(program, "uFaceCount")
+        faceRectsLoc = GLES20.glGetUniformLocation(program, "uFaces[0]")
+        pixelStepLoc = GLES20.glGetUniformLocation(program, "uPixelStep")
 
         Matrix.setIdentityM(stMatrix, 0)
         updateMvp()
@@ -296,6 +321,17 @@ class GlPipeline {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTextureId)
         GLES20.glUniform1i(textureLoc, 0)
+        val freshFaces = if (System.nanoTime() - facesUpdatedNs < 250_000_000L) faces else emptyList()
+        val rects = FloatArray(32)
+        freshFaces.forEachIndexed { i, r ->
+            rects[i * 4] = r.left; rects[i * 4 + 1] = r.top
+            rects[i * 4 + 2] = r.right; rects[i * 4 + 3] = r.bottom
+        }
+        // -1 disables; 0 means no tracking and pixelates the entire image.
+        GLES20.glUniform1i(faceCountLoc, if (faceEnabled) freshFaces.size else -1)
+        GLES20.glUniform4fv(faceRectsLoc, 8, rects, 0)
+        val block = (8f + faceStrength * 0.88f) * minOf(cameraWidth, cameraHeight).coerceAtLeast(1) / 720f
+        GLES20.glUniform2f(pixelStepLoc, block / cameraWidth.coerceAtLeast(1), block / cameraHeight.coerceAtLeast(1))
         GLES20.glUniformMatrix4fv(mvpLoc, 1, false, mvpMatrix, 0)
         GLES20.glUniformMatrix4fv(stLoc, 1, false, correctedStMatrix, 0)
         GLES20.glEnableVertexAttribArray(positionLoc)
@@ -396,8 +432,21 @@ class GlPipeline {
             precision mediump float;
             varying vec2 v_texCoord;
             uniform samplerExternalOES s_texture;
+            uniform int uFaceCount;
+            uniform vec4 uFaces[8];
+            uniform vec2 uPixelStep;
             void main() {
-                gl_FragColor = texture2D(s_texture, v_texCoord);
+                bool obscure = uFaceCount == 0;
+                for (int i = 0; i < 8; i++) {
+                    if (i < uFaceCount) {
+                        vec4 r = uFaces[i];
+                        if (v_texCoord.x >= r.x && v_texCoord.x <= r.z &&
+                            v_texCoord.y >= r.y && v_texCoord.y <= r.w) obscure = true;
+                    }
+                }
+                vec2 uv = v_texCoord;
+                if (obscure) uv = clamp((floor(uv / uPixelStep) + 0.5) * uPixelStep, 0.0, 1.0);
+                gl_FragColor = texture2D(s_texture, uv);
             }
         """
     }

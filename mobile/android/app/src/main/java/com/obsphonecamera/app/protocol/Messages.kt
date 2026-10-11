@@ -50,7 +50,18 @@ data class CameraControlConfig(
     val wbMode: String,
     val wbKelvin: Int,
     val torch: Boolean,
-)
+    val facePixelation: Boolean = false,
+    val facePixelationStrength: Int = 50,
+) {
+    fun withLocalFacePixelation(enabled: Boolean, strength: Int): CameraControlConfig = copy(
+        facePixelation = enabled || facePixelation,
+        facePixelationStrength = when {
+            enabled && facePixelation -> maxOf(strength, facePixelationStrength)
+            enabled -> strength
+            else -> facePixelationStrength
+        }.coerceIn(1, 100),
+    )
+}
 
 data class AudioConfig(
     val enabled: Boolean,
@@ -89,6 +100,8 @@ data class StreamConfig(
                     wbMode = c.optString("wb_mode", "auto"),
                     wbKelvin = c.optInt("wb_kelvin", 5500).coerceIn(2500, 10000),
                     torch = c.optBoolean("torch", false),
+                    facePixelation = c.optBoolean("face_pixelation", false),
+                    facePixelationStrength = c.optInt("face_pixelation_strength", 50).coerceIn(1, 100),
                 ),
                 audio = AudioConfig(
                     enabled = a.optBoolean("enabled", false),

@@ -65,6 +65,8 @@ private:
 	std::string orientation = "auto";
 	std::string aspect = "source";
 	bool audioEnabled = false;
+	bool facePixelation = false;
+	int facePixelationStrength = 50;
 	bool statusOverlay = true;
 	std::string languagePref = "auto";
 	bool requirePairingPref = true;

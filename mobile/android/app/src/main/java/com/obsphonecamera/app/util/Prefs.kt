@@ -49,6 +49,14 @@ class Prefs(context: Context) {
         get() = sp.getString(KEY_LAST_RES, "1920x1080") ?: "1920x1080"
         set(value) = sp.edit().putString(KEY_LAST_RES, value).apply()
 
+    var facePixelation: Boolean
+        get() = sp.getBoolean("face_pixelation", false)
+        set(value) = sp.edit().putBoolean("face_pixelation", value).apply()
+
+    var facePixelationStrength: Int
+        get() = sp.getInt("face_pixelation_strength", 50).coerceIn(1, 100)
+        set(value) = sp.edit().putInt("face_pixelation_strength", value.coerceIn(1, 100)).apply()
+
     var lastFps: Int
         get() = sp.getInt(KEY_LAST_FPS, 30)
         set(value) = sp.edit().putInt(KEY_LAST_FPS, value).apply()

@@ -3,6 +3,9 @@ package com.obsphonecamera.app.camera
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.SurfaceTexture
+import android.graphics.RectF
+import android.hardware.camera2.CaptureResult
+import android.hardware.camera2.TotalCaptureResult
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
@@ -55,6 +58,40 @@ class CameraController(
 
     var currentCameraId: String? = null
         private set
+
+    var onFaces: ((List<RectF>) -> Unit)? = null
+    private var outputSize = Size(1, 1)
+    private var pendingFacePixelation = false
+    private val captureCallback = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+            val id = currentCameraId ?: return
+            val chars = cameraManager.getCameraCharacteristics(id)
+            val crop = result.get(CaptureResult.SCALER_CROP_REGION)
+                ?: chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: return
+            // Camera2 further center-crops to the output stream's aspect ratio.
+            val region = RectF(crop)
+            val aspect = outputSize.width.toFloat() / outputSize.height
+            if (region.width() / region.height() > aspect) {
+                val inset = (region.width() - region.height() * aspect) / 2f
+                region.inset(inset, 0f)
+            } else {
+                val inset = (region.height() - region.width() / aspect) / 2f
+                region.inset(0f, inset)
+            }
+            val faces = result.get(CaptureResult.STATISTICS_FACES).orEmpty().map { face ->
+                val r = RectF(face.bounds)
+                // Include forehead/chin and allow for metadata latency during movement.
+                r.inset(-r.width() * 0.30f, -r.height() * 0.40f)
+                RectF(
+                    ((r.left - region.left) / region.width()).coerceIn(0f, 1f),
+                    ((r.top - region.top) / region.height()).coerceIn(0f, 1f),
+                    ((r.right - region.left) / region.width()).coerceIn(0f, 1f),
+                    ((r.bottom - region.top) / region.height()).coerceIn(0f, 1f),
+                )
+            }.filter { it.width() > 0f && it.height() > 0f }
+            onFaces?.invoke(faces)
+        }
+    }
 
     private var pendingTorch = false
     private var pendingFocusMode = "auto"
@@ -113,6 +150,7 @@ class CameraController(
     @SuppressLint("MissingPermission")
     fun open(cameraId: String, target: Surface, size: Size, fps: Int, onOpened: () -> Unit) {
         closeCamera()
+        outputSize = size
         val thread = HandlerThread("ocp-camera").also { it.start() }
         sessionThread = thread
         sessionHandler = Handler(thread.looper)
@@ -164,7 +202,7 @@ class CameraController(
                             builder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
                             requestBuilder = builder
                             applyAllLocked(builder)
-                            s.setRepeatingRequest(builder.build(), null, sessionHandler)
+                            s.setRepeatingRequest(builder.build(), captureCallback, sessionHandler)
                             onOpened()
                         } catch (e: Exception) {
                             errorHandler(e.message ?: "session start failed")
@@ -195,10 +233,12 @@ class CameraController(
         pendingWbMode = cfg.wbMode
         pendingWbKelvin = cfg.wbKelvin
         pendingTorch = cfg.torch
+        pendingFacePixelation = cfg.facePixelation
         reapply()
     }
 
     fun closeCamera() {
+        onFaces?.invoke(emptyList())
         try {
             session?.close()
         } catch (_: Exception) {
@@ -225,7 +265,7 @@ class CameraController(
         val s = session ?: return
         try {
             applyAllLocked(builder)
-            s.setRepeatingRequest(builder.build(), null, sessionHandler)
+            s.setRepeatingRequest(builder.build(), captureCallback, sessionHandler)
         } catch (_: Exception) {
         }
     }
@@ -238,6 +278,12 @@ class CameraController(
             return
         }
 
+        val modes = chars.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_FACE_DETECT_MODES) ?: intArrayOf()
+        val mode = if (!pendingFacePixelation) CaptureRequest.STATISTICS_FACE_DETECT_MODE_OFF
+            else if (modes.contains(CaptureRequest.STATISTICS_FACE_DETECT_MODE_SIMPLE)) CaptureRequest.STATISTICS_FACE_DETECT_MODE_SIMPLE
+            else if (modes.contains(CaptureRequest.STATISTICS_FACE_DETECT_MODE_FULL)) CaptureRequest.STATISTICS_FACE_DETECT_MODE_FULL
+            else CaptureRequest.STATISTICS_FACE_DETECT_MODE_OFF
+        builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, mode)
         applyFocus(builder, chars)
         applyExposure(builder, chars)
         applyWhiteBalance(builder, chars)

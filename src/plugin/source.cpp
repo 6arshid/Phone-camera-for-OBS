@@ -178,6 +178,8 @@ void sourceGetDefaults(obs_data_t *settings)
 	obs_data_set_default_string(settings, "orientation", "auto");
 	obs_data_set_default_string(settings, "aspect", "source");
 	obs_data_set_default_bool(settings, "audio_enabled", false);
+	obs_data_set_default_bool(settings, "face_pixelation", false);
+	obs_data_set_default_int(settings, "face_pixelation_strength", 50);
 	obs_data_set_default_bool(settings, "status_overlay", true);
 	obs_data_set_default_string(settings, "language", "auto");
 	obs_data_set_default_bool(settings, "require_pairing", true);
@@ -265,6 +267,9 @@ obs_properties_t *sourceGetProperties(void *data)
 	obs_property_list_add_string(aspect, "9:16", "9:16");
 	obs_property_list_add_string(aspect, "1:1", "1:1");
 
+	obs_properties_add_bool(props, "face_pixelation", tr("Face.Pixelation"));
+	obs_properties_add_int_slider(props, "face_pixelation_strength", tr("Face.Strength"), 1, 100, 1);
+	obs_properties_add_text(props, "face_pixelation_info", tr("Face.Info"), OBS_TEXT_INFO);
 	obs_properties_add_bool(props, "audio_enabled", tr("Audio.Enabled"));
 	obs_properties_add_bool(props, "status_overlay", tr("Overlay.Status"));
 
@@ -337,6 +342,8 @@ SessionSettings PhoneSource::currentSettings() const
 					fpsPreset, bitrateKbps, gopS, orientation);
 	out.camera = camera;
 	out.audioEnabled = audioEnabled;
+	out.cameraCtl.face_pixelation = facePixelation;
+	out.cameraCtl.face_pixelation_strength = facePixelationStrength;
 	out.streamActive = handle ? obs_source_showing(handle) || obs_source_active(handle) : streamActive;
 	out.aspect = aspect;
 	return out;
@@ -370,6 +377,8 @@ void PhoneSource::updateSettings(obs_data_t *settings)
 		orientation = obs_data_get_string(settings, "orientation");
 		aspect = obs_data_get_string(settings, "aspect");
 		audioEnabled = obs_data_get_bool(settings, "audio_enabled");
+		facePixelation = obs_data_get_bool(settings, "face_pixelation");
+		facePixelationStrength = (int)obs_data_get_int(settings, "face_pixelation_strength");
 		statusOverlay = obs_data_get_bool(settings, "status_overlay");
 		languagePref = obs_data_get_string(settings, "language");
 		requirePairingPref = obs_data_get_bool(settings, "require_pairing");
