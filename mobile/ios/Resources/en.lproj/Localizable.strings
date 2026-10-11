@@ -1,0 +1,99 @@
+/* App */
+"app.title" = "Phone Camera";
+"app.tagline" = "Wireless camera for OBS Studio";
+
+/* Connection targets */
+"connect" = "Connect";
+"connect.title" = "Connect to OBS";
+"connect.discovered" = "Discovered servers";
+"connect.scanning" = "Searching for OBS on the local network…";
+"connect.noServers" = "No OBS servers found yet. Make sure the OBS plugin is enabled.";
+"connect.manualHint" = "Enter the OBS computer address shown by the plugin.";
+"manual.host" = "IP address";
+"manual.port" = "Control port";
+"code.title" = "Pairing code";
+"code.subtitle" = "Enter the 6-digit code shown in the OBS plugin properties.";
+"code.field" = "6-digit code";
+"qr.title" = "Scan pairing QR";
+"qr.subtitle" = "Point the camera at the QR code shown by the OBS plugin.";
+"qr.grantPermission" = "Camera access is required to scan the pairing QR code.";
+"cancel" = "Cancel";
+"close" = "Close";
+"done" = "Done";
+"retry" = "Retry";
+
+/* Status */
+"status.idle" = "Not connected";
+"status.connecting" = "Connecting…";
+"status.handshaking" = "Authenticating…";
+"status.connected" = "Connected to %@";
+"status.streaming" = "Streaming";
+"status.reconnecting" = "Reconnecting (attempt %ld)…";
+"status.error" = "Connection failed";
+
+/* Controls */
+"control.camera" = "Camera";
+"control.front" = "Front";
+"control.back" = "Back";
+"control.switch" = "Switch camera";
+"control.torch" = "Torch";
+"control.resolution" = "Resolution";
+"control.fps" = "Frame rate";
+"control.focus" = "Focus";
+"control.focus.auto" = "Auto";
+"control.focus.continuous" = "Continuous";
+"control.focus.manual" = "Manual";
+"control.focus.distance" = "Focus distance";
+"control.focus.near" = "Near";
+"control.focus.far" = "Far";
+"control.exposure" = "Exposure";
+"control.exposure.auto" = "Auto";
+"control.exposure.manual" = "Manual";
+"control.exposure.bias" = "Exposure bias";
+"control.wb" = "White balance";
+"control.wb.auto" = "Auto";
+"control.wb.manual" = "Manual";
+"control.wb.kelvin" = "Temperature";
+"control.mic" = "Microphone";
+"control.more" = "More settings";
+"control.less" = "Hide settings";
+
+/* Streaming */
+"stream.start" = "Start streaming";
+"stream.stop" = "Stop streaming";
+"stream.stopShort" = "Stop";
+"privacy.live" = "LIVE — camera and microphone are streaming to OBS";
+"privacy.liveVideo" = "LIVE — camera is streaming to OBS";
+
+/* Stats */
+"stats.title" = "Status";
+"stats.fps" = "FPS";
+"stats.bitrate" = "Bitrate";
+"stats.rtt" = "RTT";
+"stats.battery" = "Battery";
+"stats.thermal" = "Thermal";
+"stats.frames" = "Frames";
+"stats.kbps" = "kbps";
+"stats.ms" = "ms";
+"stats.unknown" = "—";
+"thermal.nominal" = "Nominal";
+"thermal.fair" = "Fair";
+"thermal.serious" = "Serious";
+"thermal.critical" = "Critical";
+
+/* Errors */
+"error.authFailed" = "Authentication failed. Check the pairing code or QR code.";
+"error.pairingFailed" = "Pairing rejected by OBS.";
+"error.network" = "Network error: %@";
+"error.timeout" = "Connection timed out.";
+"error.unreachable" = "Could not reach the server.";
+"error.badQR" = "That QR code is not an OCP pairing code.";
+"error.codeFormat" = "Enter exactly 6 digits.";
+"error.hostFormat" = "Enter a valid IPv4 address.";
+"error.cameraDenied" = "Camera access is needed for streaming.";
+"error.micDenied" = "Microphone access is needed for audio.";
+"error.internal" = "Internal error: %@";
+
+/* Misc */
+"settings.language" = "Language";
+"keepAwake.note" = "The screen stays awake while streaming.";

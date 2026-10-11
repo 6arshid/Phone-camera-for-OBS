@@ -1,0 +1,4 @@
+"NSCameraUsageDescription" = "Camera access is required to stream video to OBS Studio.";
+"NSMicrophoneUsageDescription" = "Microphone access is required to stream audio to OBS Studio.";
+"NSLocalNetworkUsageDescription" = "Local network access is required to find and connect to OBS Studio on your computer.";
+"CFBundleDisplayName" = "Phone Camera";

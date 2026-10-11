@@ -1,0 +1,4 @@
+"NSCameraUsageDescription" = "برای پخش ویدیو به OBS Studio به دسترسی دوربین نیاز است.";
+"NSMicrophoneUsageDescription" = "برای پخش صدا به OBS Studio به دسترسی میکروفن نیاز است.";
+"NSLocalNetworkUsageDescription" = "برای یافتن و اتصال به OBS Studio در رایانه شما به دسترسی شبکه محلی نیاز است.";
+"CFBundleDisplayName" = "دوربین گوشی";

@@ -1,0 +1,99 @@
+/* App */
+"app.title" = "دوربین گوشی";
+"app.tagline" = "دوربین بی‌سیم برای OBS Studio";
+
+/* Connection targets */
+"connect" = "اتصال";
+"connect.title" = "اتصال به OBS";
+"connect.discovered" = "سرورهای یافت‌شده";
+"connect.scanning" = "در حال جستجوی OBS در شبکه محلی…";
+"connect.noServers" = "هنوز سرور OBS پیدا نشد. مطمئن شوید افزونه در OBS فعال است.";
+"connect.manualHint" = "آدرس رایانه‌ای که افزونه OBS نمایش می‌دهد را وارد کنید.";
+"manual.host" = "نشانی IP";
+"manual.port" = "پورت کنترل";
+"code.title" = "کد جفت‌سازی";
+"code.subtitle" = "کد ۶ رقمی نمایش‌داده‌شده در تنظیمات افزونه OBS را وارد کنید.";
+"code.field" = "کد ۶ رقمی";
+"qr.title" = "اسکن کد جفت‌سازی QR";
+"qr.subtitle" = "دوربین را به سمت کد QR نمایش‌داده‌شده در افزونه OBS بگیرید.";
+"qr.grantPermission" = "برای اسکن کد QR جفت‌سازی، دسترسی به دوربین لازم است.";
+"cancel" = "انصراف";
+"close" = "بستن";
+"done" = "تمام";
+"retry" = "تلاش دوباره";
+
+/* Status */
+"status.idle" = "اتصال برقرار نیست";
+"status.connecting" = "در حال اتصال…";
+"status.handshaking" = "در حال احراز هویت…";
+"status.connected" = "متصل به %@";
+"status.streaming" = "در حال پخش";
+"status.reconnecting" = "اتصال مجدد (تلاش %ld)…";
+"status.error" = "اتصال ناموفق بود";
+
+/* Controls */
+"control.camera" = "دوربین";
+"control.front" = "جلو";
+"control.back" = "عقب";
+"control.switch" = "تعویض دوربین";
+"control.torch" = "چراغ قوه";
+"control.resolution" = "وضوح تصویر";
+"control.fps" = "نرخ فریم";
+"control.focus" = "فوکوس";
+"control.focus.auto" = "خودکار";
+"control.focus.continuous" = "پیوسته";
+"control.focus.manual" = "دستی";
+"control.focus.distance" = "فاصله فوکوس";
+"control.focus.near" = "نزدیک";
+"control.focus.far" = "دور";
+"control.exposure" = "نوردهی";
+"control.exposure.auto" = "خودکار";
+"control.exposure.manual" = "دستی";
+"control.exposure.bias" = "میزان نوردهی";
+"control.wb" = "توازن سفیدی";
+"control.wb.auto" = "خودکار";
+"control.wb.manual" = "دستی";
+"control.wb.kelvin" = "دما";
+"control.mic" = "میکروفن";
+"control.more" = "تنظیمات بیشتر";
+"control.less" = "پنهان‌کردن تنظیمات";
+
+/* Streaming */
+"stream.start" = "شروع پخش";
+"stream.stop" = "پایان پخش";
+"stream.stopShort" = "توقف";
+"privacy.live" = "زنده — دوربین و میکروفن در حال پخش به OBS هستند";
+"privacy.liveVideo" = "زنده — دوربین در حال پخش به OBS است";
+
+/* Stats */
+"stats.title" = "وضعیت";
+"stats.fps" = "فریم بر ثانیه";
+"stats.bitrate" = "نرخ بیت";
+"stats.rtt" = "تأخیر";
+"stats.battery" = "باتری";
+"stats.thermal" = "دمای دستگاه";
+"stats.frames" = "فریم‌ها";
+"stats.kbps" = "کیلوبیت/ثانیه";
+"stats.ms" = "میلی‌ثانیه";
+"stats.unknown" = "—";
+"thermal.nominal" = "عادی";
+"thermal.fair" = "متوسط";
+"thermal.serious" = "جدی";
+"thermal.critical" = "بحرانی";
+
+/* Errors */
+"error.authFailed" = "احراز هویت ناموفق بود. کد جفت‌سازی یا کد QR را بررسی کنید.";
+"error.pairingFailed" = "جفت‌سازی توسط OBS رد شد.";
+"error.network" = "خطای شبکه: %@";
+"error.timeout" = "مهلت اتصال پایان یافت.";
+"error.unreachable" = "دسترسی به سرور ممکن نیست.";
+"error.badQR" = "این کد QR یک کد جفت‌سازی OCP نیست.";
+"error.codeFormat" = "دقیقاً ۶ رقم وارد کنید.";
+"error.hostFormat" = "یک نشانی IPv4 معتبر وارد کنید.";
+"error.cameraDenied" = "برای پخش، دسترسی به دوربین لازم است.";
+"error.micDenied" = "برای پخش صدا، دسترسی به میکروفن لازم است.";
+"error.internal" = "خطای داخلی: %@";
+
+/* Misc */
+"settings.language" = "زبان";
+"keepAwake.note" = "هنگام پخش، صفحه روشن می‌ماند.";
