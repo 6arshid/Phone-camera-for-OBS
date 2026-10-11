@@ -22,6 +22,7 @@ mobile/android/build/
 mobile/android/app/build/
 mobile/android/local.properties
 *.apk
+!mobile/Phone-Camera-for-OBS-1.0.7.apk
 *.aab
 
 # iOS / Xcode
