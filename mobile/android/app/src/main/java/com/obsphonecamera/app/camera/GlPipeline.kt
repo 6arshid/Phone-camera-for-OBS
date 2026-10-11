@@ -111,6 +111,7 @@ class GlPipeline {
 
         Matrix.setIdentityM(stMatrix, 0)
         updateMvp()
+        detachCurrent()
     }
 
     fun getCameraSurface(): Surface = cameraSurface ?: throw IllegalStateException("pipeline not initialized")
@@ -128,11 +129,13 @@ class GlPipeline {
         surfaceTexture?.setDefaultBufferSize(w, h)
     }
 
+    @Synchronized
     fun setRotation(degrees: Int) {
         rotationDegrees = ((degrees % 360) + 360) % 360
         updateMvp()
     }
 
+    @Synchronized
     fun setPreviewSurface(surface: Surface?, width: Int, height: Int) {
         previewWidth = width
         previewHeight = height
@@ -154,6 +157,7 @@ class GlPipeline {
      * surface (with presentation timestamp) and the preview surface.
      * Returns true when a frame was drawn to the encoder.
      */
+    @Synchronized
     fun drawFrame(timeoutMs: Long): Boolean {
         val st = surfaceTexture ?: return false
         synchronized(frameLock) {
@@ -165,17 +169,15 @@ class GlPipeline {
             return false
         }
         val ts = System.nanoTime()
+        makeCurrent(encoderSurface)
         try {
             st.updateTexImage()
             st.getTransformMatrix(stMatrix)
-        } catch (_: Exception) {
-            return false
-        }
-        makeCurrent(encoderSurface)
+        updateMvp()
         GLES20.glViewport(0, 0, encoderWidth, encoderHeight)
         draw()
         EGLExt.eglPresentationTimeANDROID(eglDisplay, encoderSurface, ts)
-        EGL14.eglSwapBuffers(eglDisplay, encoderSurface)
+        check(EGL14.eglSwapBuffers(eglDisplay, encoderSurface)) { "Encoder buffer swap failed" }
 
         if (previewESurface != EGL14.EGL_NO_SURFACE && previewWidth > 0 && previewHeight > 0) {
             makeCurrent(previewESurface)
@@ -184,11 +186,22 @@ class GlPipeline {
             EGL14.eglSwapBuffers(eglDisplay, previewESurface)
         }
         return true
+        } finally {
+            detachCurrent()
+        }
     }
 
+    private fun detachCurrent() {
+        EGL14.eglMakeCurrent(eglDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
+    }
+
+    @Synchronized
     fun release() {
         val display = eglDisplay
         if (display == EGL14.EGL_NO_DISPLAY) return
+        makeCurrent(encoderSurface)
+        if (program != 0) { GLES20.glDeleteProgram(program); program = 0 }
+        if (oesTextureId != -1) { GLES20.glDeleteTextures(1, intArrayOf(oesTextureId), 0); oesTextureId = -1 }
         try {
             EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
         } catch (_: Exception) {
@@ -246,7 +259,7 @@ class GlPipeline {
         Matrix.setIdentityM(mvpMatrix, 0)
         if (mirror) {
             Matrix.setIdentityM(tmpMatrix, 0)
-            Matrix.setScaleM(tmpMatrix, 0, -1f, 1f, 1f)
+            Matrix.scaleM(tmpMatrix, 0, -1f, 1f, 1f)
             Matrix.multiplyMM(mvpMatrix, 0, mvpMatrix, 0, tmpMatrix, 0)
         }
         Matrix.rotateM(mvpMatrix, 0, rotationDegrees.toFloat(), 0f, 0f, 1f)
@@ -301,7 +314,7 @@ class GlPipeline {
         GLES20.glShaderSource(shader, source)
         GLES20.glCompileShader(shader)
         val status = IntArray(1)
-        GLES20.glGetCompileStatus(shader, status, 0)
+        GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, status, 0)
         if (status[0] == 0) {
             GLES20.glDeleteShader(shader)
             return 0

@@ -13,6 +13,7 @@ struct StatusCardInput {
 	std::string line2;
 	std::string line3;
 	std::string line4;
+	std::string pairingUrl;
 };
 
 // Renders a diagnostic card as top-down 32-bit BGRA.

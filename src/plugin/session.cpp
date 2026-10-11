@@ -116,8 +116,8 @@ bool Session::attach(obs_source_t *sourceIn, SessionListener *listenerIn)
 		source = sourceIn;
 		listener.store(listenerIn);
 	}
-	if (authed.load())
-		sendConfig();
+	if (authed.load() && listenerIn)
+		listenerIn->onSessionAuthenticated(this);
 	return true;
 }
 
@@ -164,6 +164,7 @@ bool Session::sendRaw(const std::vector<uint8_t> &frame)
 
 bool Session::sendMessage(const Message &msg)
 {
+	std::lock_guard<std::mutex> lock(sendMutex);
 	std::string payload = dumpMessage(msg);
 	return sendRaw(encoder.encode(payload));
 }
@@ -194,6 +195,9 @@ void Session::sendConfig()
 	cfg.audio.channels = 1;
 	cfg.has_stream = true;
 	cfg.stream.active = copy.streamActive;
+	blog(LOG_INFO, "[obs-phone-camera] config for %s: active=%s %dx%d @ %d fps",
+	     peerName.c_str(), copy.streamActive ? "true" : "false",
+	     cfg.video.width, cfg.video.height, cfg.video.fps);
 	sendMessage(makeConfig(cfg));
 }
 
@@ -281,6 +285,7 @@ bool Session::handshakePhase(std::string *err)
 	std::array<uint8_t, 16> serverNonce{};
 	uint8_t salt[16] = {};
 	uint32_t iterations = kMinPbkdf2Iterations;
+	bool codeKdf = false;
 
 	while (!stop.load()) {
 		if (monotonicNs() > deadline) {
@@ -329,12 +334,14 @@ bool Session::handshakePhase(std::string *err)
 						*err = "unsupported protocol version";
 					return false;
 				}
-				if (msg.kdf != "pbkdf2-sha256") {
+				codeKdf = msg.kdf == "pbkdf2-sha256";
+				if (!codeKdf && msg.kdf != "hkdf-sha256") {
 					if (err)
 						*err = "unsupported kdf";
 					return false;
 				}
-				if (msg.iter < kMinPbkdf2Iterations) {
+				if ((codeKdf && msg.iter < kMinPbkdf2Iterations) ||
+				    (!codeKdf && msg.iter != 0)) {
 					if (err)
 						*err = "pbkdf2 iteration count too low";
 					return false;
@@ -406,7 +413,7 @@ bool Session::handshakePhase(std::string *err)
 					candidates.push_back(c);
 				}
 			}
-			{
+			if (codeKdf) {
 				std::string code = server->pairingCode();
 				if (isValidPairingCode(code)) {
 					Candidate c;
@@ -471,11 +478,6 @@ bool Session::handshakePhase(std::string *err)
 			}
 
 			mediaKeys = keys.media();
-			encoder.setKeys(keys.control());
-			reader.setKeys(keys.control());
-			mediaReady = true;
-			authed = true;
-
 			std::string obsProof =
 			    computeObsProof(keys.kAuth, clientNonce.data(),
 					    serverNonce.data(), transcript);
@@ -485,6 +487,10 @@ bool Session::handshakePhase(std::string *err)
 					*err = "failed to send auth ok";
 				return false;
 			}
+			encoder.setKeys(keys.control());
+			reader.setKeys(keys.control());
+			mediaReady = true;
+			authed = true;
 
 			blog(LOG_INFO,
 			     "[obs-phone-camera] phone paired: %s (%s) via %s",
@@ -715,7 +721,9 @@ void Session::videoLoop()
 				continue;
 			out.timestamp = os_gettime_ns();
 			obs_source_output_video(target, &out);
-			framesOut++;
+			if (framesOut.fetch_add(1) == 0)
+				blog(LOG_INFO, "[obs-phone-camera] first decoded frame from %s: %ux%u",
+				     peerName.c_str(), out.width, out.height);
 		}
 	}
 }

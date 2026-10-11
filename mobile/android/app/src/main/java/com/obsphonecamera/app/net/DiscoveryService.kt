@@ -5,6 +5,7 @@ import com.obsphonecamera.app.util.Bytes
 import com.obsphonecamera.app.util.Hex
 import org.json.JSONObject
 import java.net.DatagramPacket
+import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.MulticastSocket
@@ -90,7 +91,7 @@ class DiscoveryService(
     private fun joinMulticast(sock: MulticastSocket) {
         try {
             val group = InetAddress.getByName(MULTICAST_GROUP)
-            sock.joinGroup(InetSocketAddress(group, PORT))
+            sock.joinGroup(group)
         } catch (_: Exception) {
         }
     }

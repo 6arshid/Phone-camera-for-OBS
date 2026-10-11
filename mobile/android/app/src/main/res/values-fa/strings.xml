@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="waiting_camera_frames">متصل — در انتظار تصویر دوربین…</string>
+    <string name="pairing_required">ابتدا QR جفت‌سازی OBS را اسکن کنید یا کد ۶ رقمی فعلی آن را وارد کنید.</string>
     <string name="app_name">دوربین گوشی برای OBS</string>
     <string name="home_title">دوربین گوشی برای OBS</string>
     <string name="home_subtitle">کلاینت پروتکل ocp/1 دوربین گوشی OBS</string>

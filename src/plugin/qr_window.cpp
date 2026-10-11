@@ -31,6 +31,7 @@ QrContent g_content;
 HWND g_hwnd = nullptr;
 std::thread g_thread;
 bool g_threadStarted = false;
+bool g_threadFinished = false;
 
 std::wstring utf8ToWide(const std::string &in)
 {
@@ -72,12 +73,13 @@ void paint(HWND hwnd)
 		int qrSize = client.right - 80;
 		if (qrSize > 420)
 			qrSize = 420;
-		int scale = qrSize / size;
+		int scale = qrSize / (size + 8);
 		int dim = scale * size;
 		int ox = (client.right - dim) / 2;
 
 		HBRUSH black = CreateSolidBrush(RGB(0, 0, 0));
-		RECT qrRect = {ox - 8, top - 8, ox + dim + 8, top + dim + 8};
+		RECT qrRect = {ox - 4 * scale, top - 4 * scale,
+			      ox + dim + 4 * scale, top + dim + 4 * scale};
 		HBRUSH white = CreateSolidBrush(RGB(255, 255, 255));
 		FillRect(dc, &qrRect, white);
 		DeleteObject(white);
@@ -153,6 +155,7 @@ void runWindowLoop()
 
 	std::lock_guard<std::mutex> lock(g_mutex);
 	g_hwnd = nullptr;
+	g_threadFinished = true;
 }
 
 }
@@ -160,8 +163,18 @@ void runWindowLoop()
 void showPairingQrWindow(const std::string &url, const std::string &code,
 			 const std::string &addresses)
 {
+	bool finished;
 	{
 		std::lock_guard<std::mutex> lock(g_mutex);
+		finished = g_threadFinished;
+	}
+	if (finished && g_thread.joinable()) {
+		g_thread.join();
+		g_threadStarted = false;
+	}
+	{
+		std::lock_guard<std::mutex> lock(g_mutex);
+		g_threadFinished = false;
 		g_content.url = utf8ToWide(url);
 		g_content.code = utf8ToWide(code);
 		g_content.addresses = utf8ToWide(addresses);

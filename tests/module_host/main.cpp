@@ -3,6 +3,7 @@
 // shuts down cleanly. Run via CTest with arguments:
 //   module_host <plugin.dll> <plugin-data-dir>
 
+#include "handshake.h"
 #include <obs.h>
 
 #include <cstdio>
@@ -76,6 +77,43 @@ int main(int argc, char **argv)
 				  nullptr);
 	CHECK(source != nullptr, "obs_source_create");
 	if (source) {
+		obs_source_inc_showing(source);
+		obs_properties_t *properties = obs_source_properties(source);
+		auto qrButton = obs_properties_get(properties, "show_qr");
+		CHECK(qrButton && strcmp(obs_property_description(qrButton), "Show pairing QR") == 0,
+		      "QR button has complete translated label");
+		for (int attempt = 0; qrButton && attempt < 2; ++attempt) {
+			obs_property_button_clicked(qrButton, source);
+			HWND window = nullptr;
+			for (int wait = 0; wait < 100 && !window; ++wait) {
+				Sleep(10);
+				window = FindWindowW(L"ObsPhoneCameraPairingQr", nullptr);
+			}
+			CHECK(window != nullptr, "pairing QR window opens and reopens");
+			if (window) {
+				PostMessageW(window, WM_CLOSE, 0, 0);
+				for (int wait = 0; wait < 100 && IsWindow(window); ++wait)
+					Sleep(10);
+				Sleep(50);
+			}
+		}
+		auto codeProperty = obs_properties_get(properties, "info_pairing");
+		std::string codeLabel = obs_property_description(codeProperty);
+		size_t codeStart = codeLabel.find(": ");
+		std::string code = codeStart == std::string::npos ? "" : codeLabel.substr(codeStart + 2, 6);
+		CHECK(ocp::isValidPairingCode(code), "pairing code property");
+		try {
+			auto master = checkHandshake(code, nullptr, source);
+			CHECK(true, "pairing code TCP handshake and encrypted config");
+			CHECK(true, "encrypted UDP H264 delivered to OBS source");
+			Sleep(300);
+			checkHandshake("", &master);
+			CHECK(true, "stored secret HKDF reconnect and encrypted config");
+		} catch (const std::exception &error) {
+			fprintf(stderr, "handshake error: %s\n", error.what());
+			CHECK(false, "TCP handshake regression");
+		}
+		obs_properties_destroy(properties);
 		CHECK(strcmp(obs_source_get_id(source), "obs_phone_camera") == 0,
 		      "obs_source_get_id");
 		CHECK(strcmp(obs_source_get_name(source), "phone-test") == 0,
@@ -100,6 +138,7 @@ int main(int argc, char **argv)
 			obs_data_release(roundtrip);
 		}
 
+		obs_source_dec_showing(source);
 		obs_source_release(source);
 		CHECK(true, "obs_source_release");
 	}

@@ -72,6 +72,7 @@ class StreamController(
     fun resolveCameraId(requested: String): String {
         val cameras = camera.listCameras()
         if (cameras.isEmpty()) return ""
+        cameras.firstOrNull { it.id == requested }?.let { return it.id }
         val entry = when (requested) {
             "front" -> cameras.firstOrNull { it.facingFront }
             "toggle" -> {
@@ -216,9 +217,10 @@ class StreamController(
             val start = System.nanoTime()
             val drew = try {
                 pipeline.drawFrame(500)
-            } catch (_: Exception) {
-                onError("GL draw failed")
-                false
+            } catch (e: Exception) {
+                drawing = false
+                onError("GL draw failed: ${e.message}")
+                return
             }
             if (drew) {
                 val elapsed = System.nanoTime() - start

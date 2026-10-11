@@ -62,7 +62,6 @@ const char *trState(int state)
 bool showQrClicked(obs_properties_t *, obs_property_t *, void *)
 {
 	Server &server = Server::instance();
-	server.rotateQrSecret();
 	showPairingQrWindow(server.makeQrUrl(), server.pairingCode(),
 			    server.addressesSummary());
 	return true;
@@ -193,6 +192,8 @@ obs_properties_t *sourceGetProperties(void *data)
 
 	std::string status = source ? source->statusText() : std::string();
 	obs_properties_add_text(props, "info_status", status.c_str(), OBS_TEXT_INFO);
+	obs_properties_add_button(props, "show_qr", tr("Button.ShowQr"), showQrClicked);
+	obs_properties_add_button(props, "new_code", tr("Button.NewCode"), newCodeClicked);
 
 	obs_property_t *device = obs_properties_add_list(props, "device", tr("Device.Label"),
 							 OBS_COMBO_TYPE_LIST,
@@ -288,8 +289,6 @@ obs_properties_t *sourceGetProperties(void *data)
 					.c_str(),
 				 OBS_TEXT_INFO);
 
-	obs_properties_add_button(props, "show_qr", tr("Button.ShowQr"), showQrClicked);
-	obs_properties_add_button(props, "new_code", tr("Button.NewCode"), newCodeClicked);
 	obs_properties_add_button(props, "copy_info", tr("Button.CopyInfo"),
 				  copyInfoClicked);
 	obs_properties_add_button(props, "disconnect", tr("Button.Disconnect"),
@@ -338,7 +337,7 @@ SessionSettings PhoneSource::currentSettings() const
 					fpsPreset, bitrateKbps, gopS, orientation);
 	out.camera = camera;
 	out.audioEnabled = audioEnabled;
-	out.streamActive = streamActive;
+	out.streamActive = handle ? obs_source_showing(handle) || obs_source_active(handle) : streamActive;
 	out.aspect = aspect;
 	return out;
 }
@@ -429,7 +428,15 @@ void PhoneSource::deactivate()
 	pushSettingsToSession();
 }
 
-void PhoneSource::show() { Server::instance().requestAttach(this); }
+void PhoneSource::show()
+{
+	{
+		std::lock_guard<std::mutex> lock(settingsMutex);
+		streamActive = true;
+	}
+	pushSettingsToSession();
+	Server::instance().requestAttach(this);
+}
 
 void PhoneSource::hide()
 {
@@ -476,6 +483,7 @@ void PhoneSource::maybeOutputStatusCard()
 			     server.addressesSummary();
 		card.line4 = "OCP/1 · tcp/" + std::to_string(server.controlPort()) +
 			     " udp/" + std::to_string(server.mediaPort());
+		card.pairingUrl = server.makeQrUrl();
 	}
 
 	int stride = 0;
@@ -555,7 +563,8 @@ void PhoneSource::onPhoneStats(const StatsMessage &stats, double latency, double
 	phoneFps = (int)(stats.fps + 0.5);
 	std::lock_guard<std::mutex> lock(infoMutex);
 	thermalState = stats.thermal;
-	state = (int)SourceState::Streaming;
+	if (stats.frames > 0)
+		state = (int)SourceState::Streaming;
 }
 
 void PhoneSource::onVideoDimensions(int width, int height)

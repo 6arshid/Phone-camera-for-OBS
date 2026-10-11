@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="waiting_camera_frames">Connected — waiting for camera frames…</string>
+    <string name="pairing_required">Scan the OBS pairing QR or enter its current 6-digit pairing code first.</string>
     <string name="app_name">Phone Camera for OBS</string>
     <string name="home_title">Phone Camera for OBS</string>
     <string name="home_subtitle">OBS Phone Camera protocol ocp/1 client</string>

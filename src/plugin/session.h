@@ -110,6 +110,7 @@ private:
 	std::string peerName;
 
 	ControlFrameEncoder encoder;
+	std::mutex sendMutex;
 	ControlFrameReader reader;
 	MediaKeys mediaKeys;
 	Reassembler reassembler;

@@ -45,4 +45,4 @@ elseif(APPLE)
 endif()
 
 install(TARGETS obs-phone-camera LIBRARY DESTINATION obs-plugins/64bit)
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/data/ DESTINATION data)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/data/ DESTINATION data/obs-plugins/obs-phone-camera)

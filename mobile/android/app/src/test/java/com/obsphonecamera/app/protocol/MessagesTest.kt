@@ -10,6 +10,14 @@ import kotlin.test.assertTrue
 class MessagesTest {
 
     @Test
+    fun autoVideoConfigUsesSupportedDefaults() {
+        val config = StreamConfig.parse("""{"type":"config","video":{"width":0,"height":0,"fps":0}}""")
+        assertEquals(1280, config.video.width)
+        assertEquals(720, config.video.height)
+        assertEquals(30, config.video.fps)
+    }
+
+    @Test
     fun discoveryAnnouncementParses() {
         val d = DiscoveryAnnouncement.parse(
             """{"t":"obs","v":1,"id":"00112233445566778899aabbccddeeff","name":"DESKTOP-NAME","tcp":47100,"udp":47109}""",
@@ -103,7 +111,7 @@ class MessagesTest {
         )
         assertEquals(3840, cfg.video.width)
         assertEquals(120, cfg.video.height)
-        assertEquals(1, cfg.video.fps)
+        assertEquals(30, cfg.video.fps)
         assertEquals(200000, cfg.video.bitrateKbps)
         assertEquals(1, cfg.video.gopS)
         assertEquals(1.0f, cfg.camera.focusDistance)

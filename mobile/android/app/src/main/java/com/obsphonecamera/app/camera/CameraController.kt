@@ -245,14 +245,13 @@ class CameraController(
     }
 
     private fun applyFocus(builder: CaptureRequest.Builder, chars: CameraCharacteristics) {
-        val minD = chars.get(CameraCharacteristics.LENS_INFO_FOCUS_DISTANCE_MINIMUM)
-        val maxD = chars.get(CameraCharacteristics.LENS_INFO_FOCUS_DISTANCE_MAXIMUM)
-        val manualOk = supportsManualFocus(chars) && minD != null && maxD != null
+        val maxD = chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
+        val manualOk = supportsManualFocus(chars)
         when (pendingFocusMode) {
             "manual" -> {
                 if (manualOk) {
                     builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
-                    val diopters = (1f - pendingFocusDistance.coerceIn(0f, 1f)) * (maxD - minD) + minD
+                    val diopters = (1f - pendingFocusDistance.coerceIn(0f, 1f)) * maxD
                     builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, diopters)
                     return
                 }
@@ -291,20 +290,20 @@ class CameraController(
             return
         }
         builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-        if (range != null && step != null && step.floatValue() > 0f) {
-            val steps = (pendingExposureBias / step.floatValue()).roundToInt()
+        if (range != null && step != null && step.toFloat() > 0f) {
+            val steps = (pendingExposureBias / step.toFloat()).roundToInt()
             builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, steps.coerceIn(range.lower, range.upper))
         }
     }
 
     private fun applyWhiteBalance(builder: CaptureRequest.Builder, chars: CameraCharacteristics) {
-        val modes = chars.get(CameraCharacteristics.CONTROL_AWB_MODES)
-        if (pendingWbMode == "manual" && modes != null &&
-            modes.contains(CaptureRequest.CONTROL_AWB_MODE_COLOR_TEMPERATURE)
-        ) {
-            builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_COLOR_TEMPERATURE)
+        val modes = chars.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES)
+        if (pendingWbMode == "manual" && supportsManualWb(chars)) {
+            builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
+            builder.set(CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX)
             val gains = kelvinToRgbGains(pendingWbKelvin)
-            builder.set(CaptureRequest.COLOR_CORRECTION_WHITE_BALANCE, gains)
+            builder.set(CaptureRequest.COLOR_CORRECTION_GAINS,
+                android.hardware.camera2.params.RggbChannelVector(gains[0], gains[1], gains[1], gains[2]))
             return
         }
         if (modes != null && modes.contains(CaptureRequest.CONTROL_AWB_MODE_AUTO)) {
@@ -325,10 +324,9 @@ class CameraController(
     companion object {
 
         fun supportsManualFocus(chars: CameraCharacteristics): Boolean {
-            val caps = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
-            val manualFocus = caps?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_FOCUS) == true
-            val distances = chars.get(CameraCharacteristics.LENS_INFO_FOCUS_DISTANCE_MINIMUM)
-            return manualFocus && distances != null
+            val distance = chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
+            val modes = chars.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)
+            return distance > 0f && modes?.contains(CaptureRequest.CONTROL_AF_MODE_OFF) == true
         }
 
         fun supportsExposureBias(chars: CameraCharacteristics): Boolean {
@@ -343,10 +341,9 @@ class CameraController(
 
         fun supportsManualWb(chars: CameraCharacteristics): Boolean {
             val caps = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
-            val modes = chars.get(CameraCharacteristics.CONTROL_AWB_MODES)
-            return (caps?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_POST_PROCESSING) == true &&
-                modes?.contains(CaptureRequest.CONTROL_AWB_MODE_COLOR_TEMPERATURE) == true) ||
-                (modes?.contains(CaptureRequest.CONTROL_AWB_MODE_COLOR_TEMPERATURE) == true)
+            val modes = chars.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES)
+            return caps?.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_POST_PROCESSING) == true &&
+                modes?.contains(CaptureRequest.CONTROL_AWB_MODE_OFF) == true
         }
 
         /** Choose the camera output size closest to (>= preferred) the requested oriented size. */

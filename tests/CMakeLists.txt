@@ -16,6 +16,11 @@ target_link_libraries(ocp_tests PRIVATE ocp_core)
 target_include_directories(ocp_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 if(WIN32 AND TARGET ocp_decoder)
+    target_sources(ocp_tests PRIVATE test_status_card.cpp
+        ${CMAKE_SOURCE_DIR}/src/plugin/status_card.cpp
+        ${CMAKE_SOURCE_DIR}/vendor/qrcodegen.cpp)
+    target_include_directories(ocp_tests PRIVATE ${CMAKE_SOURCE_DIR}/vendor)
+    target_link_libraries(ocp_tests PRIVATE gdi32 user32)
     target_sources(ocp_tests PRIVATE test_decoder_win.cpp)
     target_link_libraries(ocp_tests PRIVATE ocp_decoder)
     target_compile_definitions(ocp_tests PRIVATE
@@ -26,7 +31,8 @@ add_test(NAME ocp_unit_tests COMMAND ocp_tests)
 
 if(WIN32 AND LibObs_FOUND AND TARGET obs-phone-camera)
     add_executable(module_host module_host/main.cpp)
-    target_link_libraries(module_host PRIVATE LibObs::libobs)
+    target_link_libraries(module_host PRIVATE LibObs::libobs ocp_core ws2_32)
+    target_compile_definitions(module_host PRIVATE OCP_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}/tests/data")
 
     if(OBS_ROOT)
         set(_ocp_obs_bin "${OBS_ROOT}/bin/64bit")

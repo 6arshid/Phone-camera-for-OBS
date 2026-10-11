@@ -33,7 +33,10 @@ void parseIniFile(const char *path, std::map<std::string, std::string> &out)
 		size_t eq = text.find('=');
 		if (eq == std::string::npos || eq == 0)
 			continue;
-		out[text.substr(0, eq)] = text.substr(eq + 1);
+		std::string value = text.substr(eq + 1);
+		if (value.size() >= 2 && value.front() == '"' && value.back() == '"')
+			value = value.substr(1, value.size() - 2);
+		out[text.substr(0, eq)] = value;
 	}
 	fclose(f);
 }

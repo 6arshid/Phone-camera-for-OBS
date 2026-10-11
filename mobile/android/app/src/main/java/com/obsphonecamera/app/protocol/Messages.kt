@@ -73,9 +73,9 @@ data class StreamConfig(
             return StreamConfig(
                 video = VideoConfig(
                     codec = v.optString("codec", "h264"),
-                    width = v.optInt("width", 1920).coerceIn(160, 3840),
-                    height = v.optInt("height", 1080).coerceIn(120, 2160),
-                    fps = v.optInt("fps", 30).coerceIn(1, 120),
+                    width = v.optInt("width", 1920).let { if (it == 0) 1280 else it.coerceIn(160, 3840) and -2 },
+                    height = v.optInt("height", 1080).let { if (it == 0) 720 else it.coerceIn(120, 2160) and -2 },
+                    fps = v.optInt("fps", 0).let { if (it <= 0) 30 else it.coerceIn(1, 120) },
                     bitrateKbps = v.optInt("bitrate_kbps", 0).coerceIn(0, 200000),
                     gopS = v.optInt("gop_s", 2).coerceIn(1, 30),
                     camera = v.optString("camera", "back"),

@@ -25,6 +25,7 @@ import com.obsphonecamera.app.util.Prefs
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.Executors
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
@@ -68,6 +69,7 @@ class SessionManager(
     private val timerScheduler = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "ocp-timers") }
 
     private var control: ControlClient? = null
+    private var connectionGeneration = 0L
     private var mediaSender: MediaSender? = null
     private var stream: StreamController? = null
     private var mic: MicCapture? = null
@@ -299,6 +301,11 @@ class SessionManager(
 
     private fun startConnection(newHost: String, newPort: Int) {
         teardownSession()
+        if (pendingSecretHex == null && pendingCode == null) {
+            userDisconnect = true
+            updateState(SessionState.ERROR, appContext.getString(com.obsphonecamera.app.R.string.pairing_required))
+            return
+        }
         userDisconnect = false
         host = newHost
         port = newPort
@@ -311,7 +318,7 @@ class SessionManager(
             pbkdf2Iter = 0
         }
         updateState(SessionState.CONNECTING, "$host:$port")
-        val client = ControlClient(host, port, controlListener)
+        val client = ControlClient(host, port, controlListener(connectionGeneration))
         control = client
         try {
             client.connect()
@@ -354,17 +361,30 @@ class SessionManager(
         }
     }
 
-    private val controlListener = object : ControlClient.Listener {
+    private fun controlListener(generation: Long) = object : ControlClient.Listener {
         override fun onPlaintextFrame(payload: ByteArray) {
-            executor.execute { handlePlaintext(payload) }
+            if (executor.isShutdown) return
+            val processed = CountDownLatch(1)
+            executor.execute {
+                try {
+                    if (generation == connectionGeneration) handlePlaintext(payload)
+                } finally {
+                    processed.countDown()
+                }
+            }
+            // auth_ok must install keys before the reader consumes encrypted config.
+            processed.await()
         }
 
         override fun onEncryptedFrame(payload: ByteArray) {
-            executor.execute { handleEncrypted(payload) }
+            if (executor.isShutdown) return
+            executor.execute { if (generation == connectionGeneration) handleEncrypted(payload) }
         }
 
         override fun onDisconnected(reason: String?) {
+            if (executor.isShutdown) return
             executor.execute {
+                if (generation != connectionGeneration) return@execute
                 val wasStreaming = state == SessionState.STREAMING
                 teardownSession()
                 if (wasStreaming) {
@@ -387,7 +407,7 @@ class SessionManager(
             return
         }
         when (type) {
-            "challenge" -> onChallenge(payload, text)
+            "challenge" -> onChallenge(text)
             "auth_ok" -> onAuthOk(text)
             "error" -> onErrorFrame(text)
             "bye" -> {
@@ -414,7 +434,7 @@ class SessionManager(
         }
     }
 
-    private fun onChallenge(helloPayload: ByteArray, challengeText: String) {
+    private fun onChallenge(challengeText: String) {
         updateState(SessionState.HANDSHAKE, "challenge")
         challengeJson = challengeText
         val o = JSONObject(challengeText)
@@ -437,7 +457,7 @@ class SessionManager(
         val cNonce = Hex.decode(clientNonceHex)
         val sNonce = Hex.decode(serverNonceHex)
         val transcript = KeySchedule.transcript(
-            helloPayload,
+            helloJson.toByteArray(Charsets.UTF_8),
             challengeJson.toByteArray(Charsets.UTF_8),
         )
         val keys = KeySchedule.keys(master, cNonce, sNonce)
@@ -523,7 +543,7 @@ class SessionManager(
                 }
             }, { msg ->
                 lastError = msg
-                mainHandler.post { listener.onStateChanged(state, msg) }
+                updateState(SessionState.ERROR, msg)
             })
         }
         stream?.setPreviewSurface(previewSurface, previewWidth, previewHeight)
@@ -632,6 +652,10 @@ class SessionManager(
                 orientation = cfg.video.orientation,
             ),
         )
+        if (!s.isRunning) {
+            updateState(SessionState.ERROR, lastError ?: "Camera pipeline could not start")
+            return
+        }
         mediaSender?.resetFrameIds()
         lastVideoFrames = 0
         lastVideoBytes = 0
@@ -833,7 +857,6 @@ class SessionManager(
             when (pm.currentThermalStatus) {
                 android.os.PowerManager.THERMAL_STATUS_NONE -> "nominal"
                 android.os.PowerManager.THERMAL_STATUS_LIGHT -> "light"
-                android.os.PowerManager.THERMAL_STATUS_FAIR -> "fair"
                 android.os.PowerManager.THERMAL_STATUS_MODERATE -> "moderate"
                 android.os.PowerManager.THERMAL_STATUS_SEVERE -> "severe"
                 android.os.PowerManager.THERMAL_STATUS_CRITICAL -> "critical"
@@ -849,6 +872,7 @@ class SessionManager(
     // -------------------------------------------------------------- teardown
 
     private fun teardownSession() {
+        connectionGeneration++
         stopStats()
         mic?.stop()
         mic = null
@@ -898,7 +922,7 @@ class SessionManager(
     }
 
     companion object {
-        private const val APP_VERSION = "1.0.0"
+        private const val APP_VERSION = "1.0.2"
         private const val DEFAULT_BITRATE_Kbps = 4000
         private const val MIN_BITRATE_Kbps = 500
         private const val BITRATE_MIN_INTERVAL_MS = 2000L
